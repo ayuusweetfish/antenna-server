@@ -12,6 +12,10 @@ import (
 
 func signUpHandler(w http.ResponseWriter, r *http.Request) {
 	s := r.PostFormValue("handle")
+	if s == "" {
+		panic("> <")
+		// panic(fmt.Errorf("> <"))
+	}
 	fmt.Fprintln(w, "hello "+s)
 }
 
@@ -19,13 +23,27 @@ func ServerListen() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /sign-up", signUpHandler)
 
+	capturingHandler := http.NewServeMux()
+	capturingHandler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if obj := recover(); obj != nil {
+				if err, ok := obj.(error); ok {
+					http.Error(w, err.Error(), 500)
+				} else if message, ok := obj.(string); ok {
+					http.Error(w, message, 500)
+				}
+			}
+		}()
+		mux.ServeHTTP(w, r)
+	})
+
 	port := Config.Port
 	log.Printf("Listening on http://localhost:%d/\n", port)
 	if Config.Debug {
 		log.Printf("Visit http://localhost:%d/test for testing\n", port)
 	}
 	server := &http.Server{
-		Handler:      mux,
+		Handler:      capturingHandler,
 		Addr:         fmt.Sprintf("localhost:%d", port),
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
