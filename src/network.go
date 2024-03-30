@@ -19,23 +19,28 @@ func signUpHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "hello "+s)
 }
 
+// A handler that captures panics and return the error message as 500
+type errCaptureHandler struct {
+	Handler http.Handler
+}
+
+func (h *errCaptureHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if obj := recover(); obj != nil {
+			if err, ok := obj.(error); ok {
+				http.Error(w, err.Error(), 500)
+			} else {
+				message := fmt.Sprint(obj)
+				http.Error(w, message, 500)
+			}
+		}
+	}()
+	h.Handler.ServeHTTP(w, r)
+}
+
 func ServerListen() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /sign-up", signUpHandler)
-
-	capturingHandler := http.NewServeMux()
-	capturingHandler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if obj := recover(); obj != nil {
-				if err, ok := obj.(error); ok {
-					http.Error(w, err.Error(), 500)
-				} else if message, ok := obj.(string); ok {
-					http.Error(w, message, 500)
-				}
-			}
-		}()
-		mux.ServeHTTP(w, r)
-	})
 
 	port := Config.Port
 	log.Printf("Listening on http://localhost:%d/\n", port)
@@ -43,7 +48,7 @@ func ServerListen() {
 		log.Printf("Visit http://localhost:%d/test for testing\n", port)
 	}
 	server := &http.Server{
-		Handler:      capturingHandler,
+		Handler:      &errCaptureHandler{Handler: mux},
 		Addr:         fmt.Sprintf("localhost:%d", port),
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
