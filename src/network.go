@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,10 +16,10 @@ func signUpHandler(w http.ResponseWriter, r *http.Request) {
 	nickname := r.PostFormValue("nickname")
 	password := r.PostFormValue("password")
 	if nickname == "" {
-		panic("Missing nickname")
+		panic("400 Missing nickname")
 	}
 	if password == "" {
-		panic("Missing password")
+		panic("400 Missing password")
 	}
 	user := User{
 		Nickname: nickname,
@@ -85,8 +86,20 @@ func (h *errCaptureHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if obj := recover(); obj != nil {
 			if err, ok := obj.(error); ok {
 				http.Error(w, err.Error(), 500)
+			} else if str, ok := obj.(string); ok {
+				status := 500
+				message := str
+				// Try parsing the string `str` into status + message
+				index := strings.Index(str, " ")
+				if index != -1 {
+					if n, err := strconv.Atoi(str[:index]); err == nil {
+						status = n
+						message = str[(index + 1):]
+					}
+				}
+				http.Error(w, message, status)
 			} else {
-				message := fmt.Sprint(obj)
+				message := fmt.Sprint("%v", obj)
 				http.Error(w, message, 500)
 			}
 		}
