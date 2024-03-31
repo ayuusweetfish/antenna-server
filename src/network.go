@@ -19,6 +19,33 @@ func signUpHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "hello "+s)
 }
 
+func avatarHandler(w http.ResponseWriter, r *http.Request) {
+	handle := r.PathValue("profile_id")
+	fmt.Fprintln(w, "avatar "+handle)
+}
+
+func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
+	room := Room{
+		Title:       r.PostFormValue("title"),
+		Tags:        r.PostFormValue("tags"),
+		Description: r.PostFormValue("description"),
+	}
+	if err := room.Save(); err != nil {
+		panic(err)
+	}
+	fmt.Fprintf(w, "%v\n", room)
+}
+
+func roomGetHandler(w http.ResponseWriter, r *http.Request) {
+	room := Room{
+		Id: r.PathValue("room_id"),
+	}
+	if err := room.Load(); err != nil {
+		panic(err)
+	}
+	fmt.Fprintf(w, "%v\n", room)
+}
+
 // A handler that captures panics and return the error message as 500
 type errCaptureHandler struct {
 	Handler http.Handler
@@ -41,6 +68,10 @@ func (h *errCaptureHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func ServerListen() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /sign-up", signUpHandler)
+	mux.HandleFunc("GET /avatar/{profile_id}", avatarHandler)
+
+	mux.HandleFunc("POST /room/new", roomCreateHandler)
+	mux.HandleFunc("GET /room/{room_id}", roomGetHandler)
 
 	port := Config.Port
 	log.Printf("Listening on http://localhost:%d/\n", port)
