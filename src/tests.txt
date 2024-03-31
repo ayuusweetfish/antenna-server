@@ -1,0 +1,3 @@
+curl -v http://localhost:10405/sign-up -d 'nickname=aaa&password=111'
+curl -v http://localhost:10405/log-in -d 'id=1&password=111'
+curl -v http://localhost:10405/log-in -d 'id=1&password=112'

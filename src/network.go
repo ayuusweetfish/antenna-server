@@ -7,16 +7,49 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 )
 
 func signUpHandler(w http.ResponseWriter, r *http.Request) {
-	s := r.PostFormValue("handle")
-	if s == "" {
-		panic("> <")
-		// panic(fmt.Errorf("> <"))
+	nickname := r.PostFormValue("nickname")
+	password := r.PostFormValue("password")
+	if nickname == "" {
+		panic("Missing nickname")
 	}
-	fmt.Fprintln(w, "hello "+s)
+	if password == "" {
+		panic("Missing password")
+	}
+	user := User{
+		Nickname: nickname,
+		Password: password,
+	}
+	user.Save()
+	fmt.Fprintf(w, "%v\n", user)
+}
+
+func logInHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PostFormValue("id")
+	password := r.PostFormValue("password")
+	if id == "" {
+		panic("400 Missing id")
+	}
+	idN, err := strconv.Atoi(id)
+	if err != nil {
+		panic("400 Incorrect id format")
+	}
+	if password == "" {
+		panic("400 Missing password")
+	}
+	user := User{Id: idN}
+	if !user.LoadById() {
+		panic("401 No such user")
+	}
+	if !user.VerifyPassword(password) {
+		panic("401 Incorrect password")
+	}
+
+	fmt.Fprintf(w, "%v\n", user)
 }
 
 func avatarHandler(w http.ResponseWriter, r *http.Request) {
@@ -30,9 +63,7 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 		Tags:        r.PostFormValue("tags"),
 		Description: r.PostFormValue("description"),
 	}
-	if err := room.Save(); err != nil {
-		panic(err)
-	}
+	room.Save()
 	fmt.Fprintf(w, "%v\n", room)
 }
 
@@ -40,9 +71,7 @@ func roomGetHandler(w http.ResponseWriter, r *http.Request) {
 	room := Room{
 		Id: r.PathValue("room_id"),
 	}
-	if err := room.Load(); err != nil {
-		panic(err)
-	}
+	room.Load()
 	fmt.Fprintf(w, "%v\n", room)
 }
 
@@ -68,6 +97,7 @@ func (h *errCaptureHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func ServerListen() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /sign-up", signUpHandler)
+	mux.HandleFunc("POST /log-in", logInHandler)
 	mux.HandleFunc("GET /avatar/{profile_id}", avatarHandler)
 
 	mux.HandleFunc("POST /room/new", roomCreateHandler)

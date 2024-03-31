@@ -24,6 +24,9 @@ func main() {
 		panic(err)
 	}
 
+	if err := ConnectSQL(); err != nil {
+		panic(err)
+	}
 	ConnectRedis()
 	ServerListen()
 }
