@@ -5,36 +5,48 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
-type User struct {
-	Id       int
-	Nickname string
-	Email    string
-	Password string
-}
-
-type Profile struct {
-	Id      int
-	Creator int
-	Avatar  string
-	Details string
-	Stats   [8]int
-	Traits  []string
-}
-
-type Room struct {
-	Id          string
-	Title       string
-	Tags        string
-	Description string
-}
+////// Models //////
 
 var db *sql.DB
+
+type tableSchema struct {
+	table   string
+	columns []string
+}
+
+var schemata []tableSchema
+
+func registerSchema(table string, columns ...string) {
+	schemata = append(schemata, tableSchema{table, columns})
+}
+
+func InitializeSchemata() error {
+	for _, schema := range schemata {
+		var cmd strings.Builder
+		cmd.WriteString("CREATE TABLE IF NOT EXISTS " + schema.table + " (")
+		for i, columnDesc := range schema.columns {
+			// columnName := strings.SplitN(columnDesc, " ", 2)[0]
+			if i > 0 {
+				cmd.WriteString(", ")
+			}
+			cmd.WriteString(columnDesc)
+		}
+		cmd.WriteString(")")
+		cmdStr := cmd.String()
+		if _, err := db.Exec(cmdStr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func ConnectSQL() error {
 	var err error
@@ -44,14 +56,17 @@ func ConnectSQL() error {
 		return err
 	}
 
-	cmd := "CREATE TABLE IF NOT EXISTS players" +
-		"(id INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT, nickname TEXT, email TEXT, password TEXT)"
-	if _, err := db.Exec(cmd); err != nil {
-		db.Close()
-		return err
-	}
+	return InitializeSchemata()
+}
 
-	return nil
+func ResetDatabase() error {
+	for _, schema := range schemata {
+		_, err := db.Exec("DROP TABLE IF EXISTS " + schema.table)
+		if err != nil {
+			return err
+		}
+	}
+	return InitializeSchemata()
 }
 
 var rcli *redis.Client = nil
@@ -62,6 +77,31 @@ func ConnectRedis() {
 		Password: "",
 		DB:       0,
 	})
+}
+
+func nullIfZero(n interface{}) interface{} {
+	if n == 0 {
+		return nil
+	} else {
+		return n
+	}
+}
+
+////// Models //////
+
+type User struct {
+	Id       int
+	Nickname string
+	Email    string
+	Password string
+}
+
+func init() {
+	registerSchema("user",
+		"id INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT",
+		"nickname TEXT",
+		"email TEXT",
+		"password TEXT")
 }
 
 func (u *User) hashPassword() {
@@ -79,8 +119,8 @@ func (u *User) VerifyPassword(password string) bool {
 
 func (u *User) LoadById() bool {
 	err := db.QueryRow(
-		"SELECT nickname, email, password FROM players WHERE id = $1", u.Id).
-		Scan(&u.Nickname, &u.Email, &u.Password)
+		"SELECT nickname, email, password FROM user WHERE id = $1", u.Id,
+	).Scan(&u.Nickname, &u.Email, &u.Password)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false
@@ -92,18 +132,110 @@ func (u *User) LoadById() bool {
 
 func (u *User) Save() {
 	u.hashPassword()
-	err := db.QueryRow("INSERT INTO players(nickname, email, password) "+
-		"VALUES($1, $2, $3) "+
-		"ON CONFLICT(id) DO UPDATE SET "+
-		"nickname = excluded.nickname, "+
-		"email = excluded.email, "+
-		"password = excluded.password"+
-		" RETURNING id",
-		u.Nickname, u.Email, u.Password).
-		Scan(&u.Id)
+	err := db.QueryRow("INSERT OR REPLACE INTO user(id, nickname, email, password) "+
+		"VALUES($1, $2, $3, $4) RETURNING id",
+		nullIfZero(u.Id), u.Nickname, u.Email, u.Password,
+	).Scan(&u.Id)
 	if err != nil {
 		panic(err)
 	}
+}
+
+type Profile struct {
+	Id      int
+	Creator int
+	Avatar  string
+	Details string
+	Stats   [8]int
+	Traits  []string
+}
+
+func init() {
+	registerSchema("profile",
+		"id INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT",
+		"creator INTEGER",
+		"avatar TEXT",
+		"details TEXT",
+		"stats TEXT",
+		"traits TEXT",
+		"FOREIGN KEY (creator) REFERENCES user(id)")
+}
+
+func parseProfileStats(s string) ([8]int, error) {
+	stats := strings.Split(s, ",")
+	if len(stats) != 8 {
+		return [8]int{}, fmt.Errorf("Stats should be of length 8")
+	}
+
+	var statsN [8]int
+	for i := range 8 {
+		val, err := strconv.ParseUint(stats[i], 10, 8)
+		if err != nil || val < 10 || val > 90 {
+			return [8]int{}, fmt.Errorf("Incorrect stat value \"%s\"", stats[i])
+		}
+		statsN[i] = int(val)
+	}
+	return statsN, nil
+}
+func encodeProfileStats(stats [8]int) string {
+	var builder strings.Builder
+	for i := range 8 {
+		if i > 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(strconv.Itoa(int(stats[i])))
+	}
+	return builder.String()
+}
+
+func parseProfileTraits(s string) []string {
+	return strings.Split(s, ",")
+}
+func encodeProfileTraits(traits []string) string {
+	return strings.Join(traits, ",")
+}
+
+func (p *Profile) Save() {
+	err := db.QueryRow("INSERT OR REPLACE INTO profile(id, creator, avatar, details, stats, traits) "+
+		"VALUES($1, $2, $3, $4, $5, $6) RETURNING id",
+		nullIfZero(p.Id), p.Creator, p.Avatar, p.Details,
+		encodeProfileStats(p.Stats), encodeProfileTraits(p.Traits),
+	).Scan(&p.Id)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (p *Profile) Load() bool {
+	var stats, traits string
+	err := db.QueryRow(
+		"SELECT creator, avatar, details, stats, traits FROM profile WHERE id = $1",
+		p.Id,
+	).Scan(
+		&p.Creator,
+		&p.Avatar,
+		&p.Details,
+		&stats,
+		&traits,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false
+		}
+		panic(err)
+	}
+	if p.Stats, err = parseProfileStats(stats); err != nil {
+		panic(err)
+	}
+	p.Traits = parseProfileTraits(traits)
+	return true
+}
+
+type Room struct {
+	Id          string
+	Title       string
+	Tags        string
+	Description string
 }
 
 func (r *Room) Load() {

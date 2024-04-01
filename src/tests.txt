@@ -3,3 +3,4 @@ curl -v http://localhost:10405/log-in -d 'id=1&password=111'
 curl -v http://localhost:10405/log-in -d 'id=1&password=112'
 
 curl -v http://localhost:10405/profile/create -d 'avatar=1' --data-urlencode 'details={"gender":2,"orientation":5,"race":"elf"}' -d 'stats=18,17,16,15,14,13,12,11&traits=t1,t2,t3'
+curl -v http://localhost:10405/profile/1

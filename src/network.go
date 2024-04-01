@@ -55,32 +55,35 @@ func logInHandler(w http.ResponseWriter, r *http.Request) {
 
 func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
 	details := r.PostFormValue("details")
-	stats := strings.Split(r.PostFormValue("stats"), ",")
-	traits := strings.Split(r.PostFormValue("traits"), ",")
-	if len(stats) != 8 {
-		panic("400 Stats should be of length 8")
+	stats, err := parseProfileStats(r.PostFormValue("stats"))
+	if err != nil {
+		panic("400 " + err.Error())
 	}
-
-	var statsN [8]int
-	for i := range 8 {
-		val, err := strconv.ParseUint(stats[i], 10, 8)
-		if err != nil || val < 10 || val > 90 {
-			panic("400 Incorrect stat value \"" + stats[i] + "\"")
-		}
-		statsN[i] = int(val)
-	}
+	traits := parseProfileTraits(r.PostFormValue("traits"))
 
 	profile := Profile{
 		Avatar:  "",
 		Details: details,
-		Stats:   statsN,
+		Stats:   stats,
 		Traits:  traits,
 	}
+	profile.Save()
 
 	fmt.Fprintf(w, "%v\n", profile)
 }
 
 func profileGetHandler(w http.ResponseWriter, r *http.Request) {
+	profileId, err := strconv.Atoi(r.PathValue("profile_id"))
+	if err != nil {
+		panic("400 Incorrect profile_id")
+	}
+	profile := Profile{
+		Id: profileId,
+	}
+	if !profile.Load() {
+		panic("404 No such profile")
+	}
+	fmt.Fprintf(w, "%v\n", profile)
 }
 
 func avatarHandler(w http.ResponseWriter, r *http.Request) {
