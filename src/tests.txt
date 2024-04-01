@@ -7,4 +7,5 @@ curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/1/update -d 'stats=
 curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/1
 
 curl -v -b jar.txt -c jar.txt http://localhost:10405/room/create -d 'title=Title&tags=tag1,tag2&description=Lorem+ipsum'
+curl -v -b jar.txt -c jar.txt http://localhost:10405/room/1/update -d 'title=Title111'
 curl -v -b jar.txt -c jar.txt http://localhost:10405/room/1

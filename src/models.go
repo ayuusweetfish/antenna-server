@@ -289,38 +289,63 @@ func (p *Profile) Load() bool {
 
 type Room struct {
 	Id          string
+	Creator     int
 	Title       string
 	Tags        string
 	Description string
 }
 
 func (r *Room) Repr() OrderedKeysMarshal {
+	creator := User{Id: r.Creator}
+	if !creator.LoadById() {
+		panic("500 Inconsistent databases")
+	}
 	return OrderedKeysMarshal{
 		{"id", r.Id},
+		{"creator", creator.Repr()},
 		{"title", r.Title},
 		{"tags", r.Tags},
 		{"description", r.Description},
 	}
 }
 
-func (r *Room) Load() {
+func (r *Room) Load() bool {
+	exists, err := rcli.Exists(context.Background(), "room:"+r.Id).Result()
+	if err != nil {
+		panic(err)
+	}
+	if exists == 0 {
+		return false
+	}
 	val, err := rcli.HGetAll(context.Background(), "room:"+r.Id).Result()
 	if err != nil {
 		panic(err)
 	}
 	r.Title = val["title"]
-	r.Tags = val["tags"]
-	r.Description = val["description"]
-}
-
-func (r *Room) Save() {
-	val, err := rcli.Incr(context.Background(), "room_count").Result()
+	creatorUserId, err := strconv.Atoi(val["creator"])
 	if err != nil {
 		panic(err)
 	}
-	r.Id = fmt.Sprintf("%d", val)
-	_, err = rcli.HSet(context.Background(), "room:"+r.Id,
+	r.Creator = creatorUserId
+	r.Tags = val["tags"]
+	r.Description = val["description"]
+	return true
+}
+
+func (r *Room) Save() {
+	if r.Id == "" {
+		val, err := rcli.Incr(context.Background(), "room_count").Result()
+		if err != nil {
+			panic(err)
+		}
+		r.Id = fmt.Sprintf("%d", val)
+	}
+	_, err := rcli.HSet(context.Background(), "room:"+r.Id,
 		"title", r.Title,
+		"creator", r.Creator,
 		"tags", r.Tags,
 		"description", r.Description).Result()
+	if err != nil {
+		panic(err)
+	}
 }

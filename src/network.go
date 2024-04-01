@@ -182,7 +182,9 @@ func profileCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 	}
 
 	profile := Profile{Id: 0}
-	if !createNew {
+	if createNew {
+		profile.Creator = user.Id
+	} else {
 		profile.Id = parseIntFromPathValue(r, "profile_id")
 		if !profile.Load() {
 			panic("404 No such profile")
@@ -192,15 +194,12 @@ func profileCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 		}
 	}
 
-	profile.Creator = user.Id
-
 	if details, has := postFormValue(r, "details", createNew); has {
 		if !json.Valid([]byte(details)) {
 			panic("400 `details` is not a valid JSON encoding")
 		}
 		profile.Details = details
 	}
-
 	if stats, has := postFormValue(r, "stats", createNew); has {
 		var err error
 		profile.Stats, err = parseProfileStats(stats)
@@ -215,11 +214,9 @@ func profileCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 	profile.Save()
 	write(w, 200, profile.Repr())
 }
-
 func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
 	profileCUHandler(w, r, true)
 }
-
 func profileUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	profileCUHandler(w, r, false)
 }
@@ -227,13 +224,8 @@ func profileUpdateHandler(w http.ResponseWriter, r *http.Request) {
 func profileGetHandler(w http.ResponseWriter, r *http.Request) {
 	user := auth(w, r)
 
-	profileId, err := strconv.Atoi(r.PathValue("profile_id"))
-	if err != nil {
-		panic("400 Incorrect profile_id")
-	}
-	profile := Profile{
-		Id: profileId,
-	}
+	profileId := parseIntFromPathValue(r, "profile_id")
+	profile := Profile{Id: profileId}
 	if !profile.Load() {
 		panic("404 No such profile")
 	}
@@ -243,20 +235,48 @@ func profileGetHandler(w http.ResponseWriter, r *http.Request) {
 
 	write(w, 200, profile.Repr())
 }
-
 func avatarHandler(w http.ResponseWriter, r *http.Request) {
 	handle := r.PathValue("profile_id")
 	fmt.Fprintln(w, "avatar "+handle)
 }
 
-func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
-	room := Room{
-		Title:       r.PostFormValue("title"),
-		Tags:        r.PostFormValue("tags"),
-		Description: r.PostFormValue("description"),
+func roomCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
+	user := auth(w, r)
+	if err := r.ParseForm(); err != nil {
+		panic("400 Incorrect form format")
 	}
+
+	room := Room{Id: ""}
+	if createNew {
+		room.Creator = user.Id
+	} else {
+		room.Id = r.PathValue("room_id")
+		if !room.Load() {
+			panic("404 No such room")
+		}
+		if room.Creator != user.Id {
+			panic("401 Not creator")
+		}
+	}
+
+	if title, has := postFormValue(r, "title", createNew); has {
+		room.Title = title
+	}
+	if tags, has := postFormValue(r, "tags", createNew); has {
+		room.Tags = tags
+	}
+	if description, has := postFormValue(r, "description", createNew); has {
+		room.Description = description
+	}
+
 	room.Save()
-	write(w, 200, JsonMessage{"id": room.Id})
+	write(w, 200, room.Repr())
+}
+func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
+	roomCUHandler(w, r, true)
+}
+func roomUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	roomCUHandler(w, r, false)
 }
 
 func roomGetHandler(w http.ResponseWriter, r *http.Request) {
@@ -309,6 +329,7 @@ func ServerListen() {
 	mux.HandleFunc("GET /profile/{profile_id}/avatar", avatarHandler)
 
 	mux.HandleFunc("POST /room/create", roomCreateHandler)
+	mux.HandleFunc("POST /room/{room_id}/update", roomUpdateHandler)
 	mux.HandleFunc("GET /room/{room_id}", roomGetHandler)
 
 	port := Config.Port
