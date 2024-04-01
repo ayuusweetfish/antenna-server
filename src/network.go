@@ -18,6 +18,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+////// Authentication //////
+
 func createAuthToken(userId int) string {
 	key := make([]byte, 64)
 retry:
@@ -75,6 +77,37 @@ func auth(w http.ResponseWriter, r *http.Request) User {
 	return user
 }
 
+////// Miscellaneous communication //////
+
+func parseIntFromPathValue(r *http.Request, key string) int {
+	n, err := strconv.Atoi(r.PathValue(key))
+	if err != nil {
+		panic("400 Incorrect `" + key + "`")
+	}
+	return n
+}
+
+func postFormValue(r *http.Request, key string, mandatory bool) (string, bool) {
+	value, ok := r.PostForm[key]
+	if mandatory && !ok {
+		panic("400 Missing `" + key + "`")
+	}
+	if ok {
+		return value[0], true
+	} else {
+		return "", false
+	}
+}
+
+func parseIntFromPostFormValue(r *http.Request, key string) int {
+	value, _ := postFormValue(r, key, true)
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		panic("400 Incorrect `" + key + "`")
+	}
+	return n
+}
+
 type JsonMessage map[string]interface{}
 
 func (obj JsonMessage) String() string {
@@ -93,6 +126,8 @@ func write(w http.ResponseWriter, status int, p interface{}) {
 	w.WriteHeader(status)
 	w.Write(bytes)
 }
+
+////// Handlers //////
 
 func signUpHandler(w http.ResponseWriter, r *http.Request) {
 	nickname := r.PostFormValue("nickname")
@@ -140,28 +175,53 @@ func logInHandler(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, user.Repr())
 }
 
-func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
+func profileCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 	user := auth(w, r)
+	if err := r.ParseForm(); err != nil {
+		panic("400 Incorrect form format")
+	}
 
-	details := r.PostFormValue("details")
-	if !json.Valid([]byte(details)) {
-		panic("400 `details` is not a valid JSON encoding")
+	profile := Profile{Id: 0}
+	if !createNew {
+		profile.Id = parseIntFromPathValue(r, "profile_id")
+		if !profile.Load() {
+			panic("404 No such profile")
+		}
+		if profile.Creator != user.Id {
+			panic("401 Not creator")
+		}
 	}
-	stats, err := parseProfileStats(r.PostFormValue("stats"))
-	if err != nil {
-		panic("400 " + err.Error())
-	}
-	traits := parseProfileTraits(r.PostFormValue("traits"))
 
-	profile := Profile{
-		Creator: user.Id,
-		Details: details,
-		Stats:   stats,
-		Traits:  traits,
+	profile.Creator = user.Id
+
+	if details, has := postFormValue(r, "details", createNew); has {
+		if !json.Valid([]byte(details)) {
+			panic("400 `details` is not a valid JSON encoding")
+		}
+		profile.Details = details
 	}
+
+	if stats, has := postFormValue(r, "stats", createNew); has {
+		var err error
+		profile.Stats, err = parseProfileStats(stats)
+		if err != nil {
+			panic("400 " + err.Error())
+		}
+	}
+	if traits, has := postFormValue(r, "traits", createNew); has {
+		profile.Traits = parseProfileTraits(traits)
+	}
+
 	profile.Save()
-
 	write(w, 200, profile.Repr())
+}
+
+func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
+	profileCUHandler(w, r, true)
+}
+
+func profileUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	profileCUHandler(w, r, false)
 }
 
 func profileGetHandler(w http.ResponseWriter, r *http.Request) {
@@ -244,6 +304,7 @@ func ServerListen() {
 	mux.HandleFunc("POST /log-in", logInHandler)
 
 	mux.HandleFunc("POST /profile/create", profileCreateHandler)
+	mux.HandleFunc("POST /profile/{profile_id}/update", profileUpdateHandler)
 	mux.HandleFunc("GET /profile/{profile_id}", profileGetHandler)
 	mux.HandleFunc("GET /profile/{profile_id}/avatar", avatarHandler)
 
