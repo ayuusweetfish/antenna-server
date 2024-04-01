@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,7 +13,66 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
+
+func createAuthToken(userId int) string {
+	key := make([]byte, 64)
+retry:
+	if _, err := rand.Read(key); err != nil {
+		panic(err)
+	}
+	keyStr := base64.StdEncoding.EncodeToString(key)
+	val, err := rcli.SetNX(context.Background(),
+		"auth-key:"+keyStr, userId, 7*24*time.Hour).Result()
+	if !val {
+		// Collision is almost impossible
+		// but handle anyway to stay theoretically sound
+		goto retry
+	}
+	if err != nil {
+		panic(err)
+	}
+	return keyStr
+}
+func validateAuthToken(token string) int {
+	val, err := rcli.GetEx(context.Background(),
+		"auth-key:"+token, 7*24*time.Hour).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return 0
+		}
+		panic(err)
+	}
+	userId, err := strconv.Atoi(val)
+	if err != nil {
+		panic(err)
+	}
+	return userId
+}
+func auth(w http.ResponseWriter, r *http.Request) User {
+	cookies := r.Cookies()
+	var cookieValue string
+	for _, cookie := range cookies {
+		if cookie.Name == "auth" {
+			cookieValue = cookie.Value
+			break
+		}
+	}
+	if cookieValue == "" {
+		panic("401 Authentication required")
+	}
+	userId := validateAuthToken(cookieValue)
+	if userId == 0 {
+		panic("401 Authentication required")
+	}
+	user := User{Id: userId}
+	if !user.LoadById() {
+		panic("500 Inconsistent databases")
+	}
+	return user
+}
 
 func signUpHandler(w http.ResponseWriter, r *http.Request) {
 	nickname := r.PostFormValue("nickname")
@@ -50,10 +112,17 @@ func logInHandler(w http.ResponseWriter, r *http.Request) {
 		panic("401 Incorrect password")
 	}
 
+	token := createAuthToken(idN)
+
+	w.Header().Add("Set-Cookie",
+		"auth="+token+"; SameSite=Strict; Path=/; Secure; Max-Age=604800")
+
 	fmt.Fprintf(w, "%v\n", user)
 }
 
 func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth(w, r)
+
 	details := r.PostFormValue("details")
 	stats, err := parseProfileStats(r.PostFormValue("stats"))
 	if err != nil {
@@ -62,6 +131,7 @@ func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
 	traits := parseProfileTraits(r.PostFormValue("traits"))
 
 	profile := Profile{
+		Creator: user.Id,
 		Avatar:  "",
 		Details: details,
 		Stats:   stats,
@@ -73,6 +143,8 @@ func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func profileGetHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth(w, r)
+
 	profileId, err := strconv.Atoi(r.PathValue("profile_id"))
 	if err != nil {
 		panic("400 Incorrect profile_id")
@@ -83,6 +155,10 @@ func profileGetHandler(w http.ResponseWriter, r *http.Request) {
 	if !profile.Load() {
 		panic("404 No such profile")
 	}
+	if profile.Creator != user.Id {
+		panic("401 Not creator")
+	}
+
 	fmt.Fprintf(w, "%v\n", profile)
 }
 
