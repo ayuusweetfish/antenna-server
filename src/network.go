@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -74,6 +75,21 @@ func auth(w http.ResponseWriter, r *http.Request) User {
 	return user
 }
 
+type JsonMessage map[string]interface{}
+
+func (obj JsonMessage) String() string {
+	b, err := json.Marshal(obj)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+func write(w http.ResponseWriter, status int, p interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(p)
+}
+
 func signUpHandler(w http.ResponseWriter, r *http.Request) {
 	nickname := r.PostFormValue("nickname")
 	password := r.PostFormValue("password")
@@ -88,7 +104,7 @@ func signUpHandler(w http.ResponseWriter, r *http.Request) {
 		Password: password,
 	}
 	user.Save()
-	fmt.Fprintf(w, "%v\n", user)
+	write(w, 200, user.Repr())
 }
 
 func logInHandler(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +133,7 @@ func logInHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Set-Cookie",
 		"auth="+token+"; SameSite=Strict; Path=/; Secure; Max-Age=604800")
 
-	fmt.Fprintf(w, "%v\n", user)
+	write(w, 200, user.Repr())
 }
 
 func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +155,7 @@ func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	profile.Save()
 
-	fmt.Fprintf(w, "%v\n", profile)
+	write(w, 200, profile.Repr())
 }
 
 func profileGetHandler(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +175,7 @@ func profileGetHandler(w http.ResponseWriter, r *http.Request) {
 		panic("401 Not creator")
 	}
 
-	fmt.Fprintf(w, "%v\n", profile)
+	write(w, 200, profile.Repr())
 }
 
 func avatarHandler(w http.ResponseWriter, r *http.Request) {

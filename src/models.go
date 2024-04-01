@@ -104,6 +104,13 @@ func init() {
 		"password TEXT")
 }
 
+func (u *User) Repr() map[string]interface{} {
+	return map[string]interface{}{
+		"id":       u.Id,
+		"nickname": u.Nickname,
+	}
+}
+
 func (u *User) hashPassword() {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -159,6 +166,16 @@ func init() {
 		"stats TEXT",
 		"traits TEXT",
 		"FOREIGN KEY (creator) REFERENCES user(id)")
+}
+
+func (p *Profile) Repr() map[string]interface{} {
+	return map[string]interface{}{
+		"id":      p.Id,
+		"avatar":  p.Avatar,
+		"details": p.Details,
+		"stats":   p.Stats,
+		"traits":  p.Traits,
+	}
 }
 
 func parseProfileStats(s string) ([8]int, error) {
