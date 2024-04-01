@@ -53,6 +53,36 @@ func logInHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%v\n", user)
 }
 
+func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
+	details := r.PostFormValue("details")
+	stats := strings.Split(r.PostFormValue("stats"), ",")
+	traits := strings.Split(r.PostFormValue("traits"), ",")
+	if len(stats) != 8 {
+		panic("400 Stats should be of length 8")
+	}
+
+	var statsN [8]int
+	for i := range 8 {
+		val, err := strconv.ParseUint(stats[i], 10, 8)
+		if err != nil || val < 10 || val > 90 {
+			panic("400 Incorrect stat value \"" + stats[i] + "\"")
+		}
+		statsN[i] = int(val)
+	}
+
+	profile := Profile{
+		Avatar:  "",
+		Details: details,
+		Stats:   statsN,
+		Traits:  traits,
+	}
+
+	fmt.Fprintf(w, "%v\n", profile)
+}
+
+func profileGetHandler(w http.ResponseWriter, r *http.Request) {
+}
+
 func avatarHandler(w http.ResponseWriter, r *http.Request) {
 	handle := r.PathValue("profile_id")
 	fmt.Fprintln(w, "avatar "+handle)
@@ -111,9 +141,12 @@ func ServerListen() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /sign-up", signUpHandler)
 	mux.HandleFunc("POST /log-in", logInHandler)
+
+	mux.HandleFunc("POST /profile/create", profileCreateHandler)
+	mux.HandleFunc("GET /profile/{profile_id}", profileGetHandler)
 	mux.HandleFunc("GET /avatar/{profile_id}", avatarHandler)
 
-	mux.HandleFunc("POST /room/new", roomCreateHandler)
+	mux.HandleFunc("POST /room/create", roomCreateHandler)
 	mux.HandleFunc("GET /room/{room_id}", roomGetHandler)
 
 	port := Config.Port

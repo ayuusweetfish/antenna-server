@@ -18,20 +18,13 @@ type User struct {
 	Password string
 }
 
-const (
-	GenderFemale = iota
-	GenderMale
-	GenderNonBinary
-)
-
 type Profile struct {
-	Creator     int
-	Avatar      string
-	Gender      int8
-	Orientation int8 // bitmask
-	Details     string
-	Stats       [8]int8
-	Traits      []string
+	Id      int
+	Creator int
+	Avatar  string
+	Details string
+	Stats   [8]int
+	Traits  []string
 }
 
 type Room struct {
