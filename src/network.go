@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -283,8 +285,106 @@ func roomGetHandler(w http.ResponseWriter, r *http.Request) {
 	room := Room{
 		Id: r.PathValue("room_id"),
 	}
-	room.Load()
+	if !room.Load() {
+		panic("404 No such room")
+	}
 	write(w, 200, room.Repr())
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
+	room := Room{Id: r.PathValue("room_id")}
+	if !room.Load() {
+		panic("404 No such room")
+	}
+
+	// Establish the WebSocket connection
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	// Set read limit and timeouts
+	c.SetReadLimit(4096)
+	c.SetReadDeadline(time.Now().Add(10 * time.Second))
+	c.SetPongHandler(func(string) error {
+		c.SetReadDeadline(time.Now().Add(10 * time.Second))
+		return nil
+	})
+
+	// `inChannel`: messages received from the client
+	// `outChannel`: messages to be sent to the client
+	inChannel := make(chan map[string]interface{}, 3)
+	outChannel := make(chan interface{}, 3)
+
+	// Goroutine that keeps reading JSON from the WebSocket connection
+	// and pushes them to `inChannel`
+	go func(c *websocket.Conn, ch chan map[string]interface{}) {
+		var object map[string]interface{}
+		for {
+			if err := c.ReadJSON(&object); err != nil {
+				if !websocket.IsCloseError(err,
+					websocket.CloseNormalClosure,
+					websocket.CloseGoingAway,
+					websocket.CloseNoStatusReceived,
+				) && !errors.Is(err, net.ErrClosed) {
+					log.Println(err)
+				}
+				if _, ok := err.(*json.SyntaxError); ok {
+					continue
+				}
+				break
+			}
+			ch <- object
+		}
+		close(ch)
+	}(c, inChannel)
+
+	outChannel <- map[string]interface{}{"message": "Hello", "room_id": room.Id}
+
+	pingTicker := time.NewTicker(5 * time.Second)
+	defer pingTicker.Stop()
+
+messageLoop:
+	for inChannel != nil && outChannel != nil {
+		select {
+		case object, ok := <-inChannel:
+			if !ok {
+				inChannel = nil
+				break messageLoop
+			}
+			// handlePlayerMessage(player, object)
+			object["message"] = "Response"
+			outChannel <- object
+
+		case object := <-outChannel:
+			if object == nil {
+				break messageLoop
+			}
+			if err := c.WriteJSON(object); err != nil {
+				log.Println(err)
+				break messageLoop
+			}
+
+		case <-pingTicker.C:
+			if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Println(err)
+				break messageLoop
+			}
+		}
+	}
+
+	c.Close()
+
+	// Even if `inChannel` has not been closed,
+	// it will be closed after the error triggered
+	// in the goroutine by `c.Close()`.
+	close(outChannel)
 }
 
 // A handler that captures panics and return the error message as 500
@@ -331,6 +431,7 @@ func ServerListen() {
 	mux.HandleFunc("POST /room/create", roomCreateHandler)
 	mux.HandleFunc("POST /room/{room_id}/update", roomUpdateHandler)
 	mux.HandleFunc("GET /room/{room_id}", roomGetHandler)
+	mux.HandleFunc("GET /room/{room_id}/channel", roomChannelHandler)
 
 	port := Config.Port
 	log.Printf("Listening on http://localhost:%d/\n", port)
