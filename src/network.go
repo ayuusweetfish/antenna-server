@@ -85,9 +85,13 @@ func (obj JsonMessage) String() string {
 	return string(b)
 }
 func write(w http.ResponseWriter, status int, p interface{}) {
+	bytes, err := json.Marshal(p)
+	if err != nil {
+		panic(err)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(p)
+	w.Write(bytes)
 }
 
 func signUpHandler(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +144,9 @@ func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
 	user := auth(w, r)
 
 	details := r.PostFormValue("details")
+	if !json.Valid([]byte(details)) {
+		panic("400 `details` is not a valid JSON encoding")
+	}
 	stats, err := parseProfileStats(r.PostFormValue("stats"))
 	if err != nil {
 		panic("400 " + err.Error())
@@ -148,7 +155,6 @@ func profileCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	profile := Profile{
 		Creator: user.Id,
-		Avatar:  "",
 		Details: details,
 		Stats:   stats,
 		Traits:  traits,

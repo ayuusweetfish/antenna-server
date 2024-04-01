@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -87,6 +89,45 @@ func nullIfZero(n interface{}) interface{} {
 	}
 }
 
+type DirectMarshal string
+
+func (m DirectMarshal) MarshalJSON() ([]byte, error) {
+	bytes := []byte(m)
+	// Syntax errors will be reported by the `json` package
+	/* if !json.Valid(bytes) {
+		return nil, fmt.Errorf("Trying to send an invalid valid JSON encoding verbatim")
+	} */
+	return bytes, nil
+}
+
+type OrderedKeysMarshal []struct {
+	key   string
+	value interface{}
+}
+
+func (m OrderedKeysMarshal) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteRune('{')
+	for i, entry := range m {
+		if i > 0 {
+			buf.WriteRune(',')
+		}
+		k, err := json.Marshal(entry.key)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(k)
+		buf.WriteRune(':')
+		v, err := json.Marshal(entry.value)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(v)
+	}
+	buf.WriteRune('}')
+	return buf.Bytes(), nil
+}
+
 ////// Models //////
 
 type User struct {
@@ -151,7 +192,6 @@ func (u *User) Save() {
 type Profile struct {
 	Id      int
 	Creator int
-	Avatar  string
 	Details string
 	Stats   [8]int
 	Traits  []string
@@ -161,20 +201,18 @@ func init() {
 	registerSchema("profile",
 		"id INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT",
 		"creator INTEGER",
-		"avatar TEXT",
 		"details TEXT",
 		"stats TEXT",
 		"traits TEXT",
 		"FOREIGN KEY (creator) REFERENCES user(id)")
 }
 
-func (p *Profile) Repr() map[string]interface{} {
-	return map[string]interface{}{
-		"id":      p.Id,
-		"avatar":  p.Avatar,
-		"details": p.Details,
-		"stats":   p.Stats,
-		"traits":  p.Traits,
+func (p *Profile) Repr() OrderedKeysMarshal {
+	return OrderedKeysMarshal{
+		{"id", p.Id},
+		{"details", DirectMarshal(p.Details)},
+		{"stats", p.Stats},
+		{"traits", p.Traits},
 	}
 }
 
@@ -213,9 +251,9 @@ func encodeProfileTraits(traits []string) string {
 }
 
 func (p *Profile) Save() {
-	err := db.QueryRow("INSERT OR REPLACE INTO profile(id, creator, avatar, details, stats, traits) "+
-		"VALUES($1, $2, $3, $4, $5, $6) RETURNING id",
-		nullIfZero(p.Id), p.Creator, p.Avatar, p.Details,
+	err := db.QueryRow("INSERT OR REPLACE INTO profile(id, creator, details, stats, traits) "+
+		"VALUES($1, $2, $3, $4, $5) RETURNING id",
+		nullIfZero(p.Id), p.Creator, p.Details,
 		encodeProfileStats(p.Stats), encodeProfileTraits(p.Traits),
 	).Scan(&p.Id)
 	if err != nil {
@@ -226,11 +264,10 @@ func (p *Profile) Save() {
 func (p *Profile) Load() bool {
 	var stats, traits string
 	err := db.QueryRow(
-		"SELECT creator, avatar, details, stats, traits FROM profile WHERE id = $1",
+		"SELECT creator, details, stats, traits FROM profile WHERE id = $1",
 		p.Id,
 	).Scan(
 		&p.Creator,
-		&p.Avatar,
 		&p.Details,
 		&stats,
 		&traits,
