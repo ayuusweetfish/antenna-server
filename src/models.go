@@ -304,7 +304,7 @@ func (r *Room) Repr() OrderedKeysMarshal {
 		{"id", r.Id},
 		{"creator", creator.Repr()},
 		{"title", r.Title},
-		{"tags", r.Tags},
+		{"tags", strings.Split(r.Tags, ",")},
 		{"description", r.Description},
 	}
 }

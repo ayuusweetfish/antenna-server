@@ -192,7 +192,7 @@ func profileCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 			panic("404 No such profile")
 		}
 		if profile.Creator != user.Id {
-			panic("401 Not creator")
+			panic("403 Not creator")
 		}
 	}
 
@@ -224,16 +224,16 @@ func profileUpdateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func profileGetHandler(w http.ResponseWriter, r *http.Request) {
-	user := auth(w, r)
+	_ = auth(w, r)
 
 	profileId := parseIntFromPathValue(r, "profile_id")
 	profile := Profile{Id: profileId}
 	if !profile.Load() {
 		panic("404 No such profile")
 	}
-	if profile.Creator != user.Id {
-		panic("401 Not creator")
-	}
+	/* if profile.Creator != user.Id {
+		panic("403 Not creator")
+	} */
 
 	write(w, 200, profile.Repr())
 }
@@ -257,7 +257,7 @@ func roomCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 			panic("404 No such room")
 		}
 		if room.Creator != user.Id {
-			panic("401 Not creator")
+			panic("403 Not creator")
 		}
 	}
 
