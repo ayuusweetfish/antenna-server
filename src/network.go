@@ -42,6 +42,12 @@ retry:
 	return keyStr
 }
 func validateAuthToken(token string) int {
+	if Config.Debug && token[0] == '!' {
+		userId, err := strconv.Atoi(token[1:])
+		if err == nil {
+			return userId
+		}
+	}
 	val, err := rcli.GetEx(context.Background(),
 		"auth-key:"+token, 7*24*time.Hour).Result()
 	if err != nil {

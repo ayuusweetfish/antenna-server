@@ -210,8 +210,13 @@ func init() {
 }
 
 func (p *Profile) Repr() OrderedKeysMarshal {
+	creator := User{Id: p.Creator}
+	if !creator.LoadById() {
+		panic("500 Inconsistent databases")
+	}
 	return OrderedKeysMarshal{
 		{"id", p.Id},
+		{"creator", creator.Repr()},
 		{"details", DirectMarshal(p.Details)},
 		{"stats", p.Stats},
 		{"traits", p.Traits},
