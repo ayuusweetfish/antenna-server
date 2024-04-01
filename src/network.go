@@ -196,7 +196,7 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 		Description: r.PostFormValue("description"),
 	}
 	room.Save()
-	fmt.Fprintf(w, "%v\n", room)
+	write(w, 200, JsonMessage{"id": room.Id})
 }
 
 func roomGetHandler(w http.ResponseWriter, r *http.Request) {
@@ -204,7 +204,7 @@ func roomGetHandler(w http.ResponseWriter, r *http.Request) {
 		Id: r.PathValue("room_id"),
 	}
 	room.Load()
-	fmt.Fprintf(w, "%v\n", room)
+	write(w, 200, room.Repr())
 }
 
 // A handler that captures panics and return the error message as 500
@@ -245,7 +245,7 @@ func ServerListen() {
 
 	mux.HandleFunc("POST /profile/create", profileCreateHandler)
 	mux.HandleFunc("GET /profile/{profile_id}", profileGetHandler)
-	mux.HandleFunc("GET /avatar/{profile_id}", avatarHandler)
+	mux.HandleFunc("GET /profile/{profile_id}/avatar", avatarHandler)
 
 	mux.HandleFunc("POST /room/create", roomCreateHandler)
 	mux.HandleFunc("GET /room/{room_id}", roomGetHandler)

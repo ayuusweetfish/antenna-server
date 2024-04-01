@@ -81,6 +81,8 @@ func ConnectRedis() {
 	})
 }
 
+////// Representation and communication //////
+
 func nullIfZero(n interface{}) interface{} {
 	if n == 0 {
 		return nil
@@ -145,10 +147,10 @@ func init() {
 		"password TEXT")
 }
 
-func (u *User) Repr() map[string]interface{} {
-	return map[string]interface{}{
-		"id":       u.Id,
-		"nickname": u.Nickname,
+func (u *User) Repr() OrderedKeysMarshal {
+	return OrderedKeysMarshal{
+		{"id", u.Id},
+		{"nickname", u.Nickname},
 	}
 }
 
@@ -290,6 +292,15 @@ type Room struct {
 	Title       string
 	Tags        string
 	Description string
+}
+
+func (r *Room) Repr() OrderedKeysMarshal {
+	return OrderedKeysMarshal{
+		{"id", r.Id},
+		{"title", r.Title},
+		{"tags", r.Tags},
+		{"description", r.Description},
+	}
 }
 
 func (r *Room) Load() {
