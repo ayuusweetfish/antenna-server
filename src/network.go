@@ -330,7 +330,7 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Goroutine that keeps reading JSON from the WebSocket connection
 	// and pushes them to `inChannel`
-	go func(c *websocket.Conn, ch chan map[string]interface{}) {
+	go func(c *websocket.Conn, inChannel chan map[string]interface{}) {
 		var object map[string]interface{}
 		for {
 			if err := c.ReadJSON(&object); err != nil {
@@ -339,58 +339,60 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 					websocket.CloseGoingAway,
 					websocket.CloseNoStatusReceived,
 				) && !errors.Is(err, net.ErrClosed) {
-					log.Println(err)
+					log.Printf("%T %v\n", err, err)
 				}
 				if _, ok := err.(*json.SyntaxError); ok {
 					continue
 				}
 				break
 			}
-			ch <- object
+			inChannel <- object
 		}
-		close(ch)
+		close(inChannel)
 	}(c, inChannel)
 
-	outChannel <- map[string]interface{}{"message": "Hello", "room_id": room.Id}
+	go func(c *websocket.Conn, inChannel chan map[string]interface{}, outChannel chan interface{}) {
+		outChannel <- map[string]interface{}{"message": "Hello", "room_id": room.Id}
 
-	pingTicker := time.NewTicker(5 * time.Second)
-	defer pingTicker.Stop()
+		pingTicker := time.NewTicker(5 * time.Second)
+		defer pingTicker.Stop()
 
-messageLoop:
-	for inChannel != nil && outChannel != nil {
-		select {
-		case object, ok := <-inChannel:
-			if !ok {
-				inChannel = nil
-				break messageLoop
-			}
-			// handlePlayerMessage(player, object)
-			object["message"] = "Response"
-			outChannel <- object
+	messageLoop:
+		for inChannel != nil && outChannel != nil {
+			select {
+			case object, ok := <-inChannel:
+				if !ok {
+					inChannel = nil
+					break messageLoop
+				}
+				// handlePlayerMessage(player, object)
+				object["message"] = "Response"
+				outChannel <- object
 
-		case object := <-outChannel:
-			if object == nil {
-				break messageLoop
-			}
-			if err := c.WriteJSON(object); err != nil {
-				log.Println(err)
-				break messageLoop
-			}
+			case object := <-outChannel:
+				if object == nil {
+					break messageLoop
+				}
+				if err := c.WriteJSON(object); err != nil {
+					log.Println(err)
+					break messageLoop
+				}
 
-		case <-pingTicker.C:
-			if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Println(err)
-				break messageLoop
+			case <-pingTicker.C:
+				if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
+					log.Println(err)
+					break messageLoop
+				}
 			}
 		}
-	}
 
-	c.Close()
+		c.Close()
 
-	// Even if `inChannel` has not been closed,
-	// it will be closed after the error triggered
-	// in the goroutine by `c.Close()`.
-	close(outChannel)
+		// Even if `inChannel` has not been closed,
+		// it will be closed after the error triggered
+		// in the goroutine by `c.Close()`.
+		close(outChannel)
+	}(c, inChannel, outChannel)
 }
 
 // A handler that captures panics and return the error message as 500
