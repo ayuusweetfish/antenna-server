@@ -395,6 +395,20 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 	}(c, inChannel, outChannel)
 }
 
+var testCounter = 0
+
+func testHandler(w http.ResponseWriter, r *http.Request) {
+	content, err := os.ReadFile("test.html")
+	if err != nil {
+		panic("404 Cannot read page content")
+	}
+	s := string(content)
+	testCounter++
+	s = strings.Replace(s, "~ room ~", r.PathValue("room_id"), 1)
+	s = strings.Replace(s, "~ id ~", strconv.Itoa(testCounter), 1)
+	w.Write([]byte(s))
+}
+
 // A handler that captures panics and return the error message as 500
 type errCaptureHandler struct {
 	Handler http.Handler
@@ -440,6 +454,11 @@ func ServerListen() {
 	mux.HandleFunc("POST /room/{room_id}/update", roomUpdateHandler)
 	mux.HandleFunc("GET /room/{room_id}", roomGetHandler)
 	mux.HandleFunc("GET /room/{room_id}/channel", roomChannelHandler)
+
+	if Config.Debug {
+		mux.HandleFunc("GET /test", testHandler)
+		mux.HandleFunc("GET /test/{room_id}", testHandler)
+	}
 
 	port := Config.Port
 	log.Printf("Listening on http://localhost:%d/\n", port)

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset='utf-8'>
+<script>  
+window.addEventListener('load', function(evt) {
+  const room = document.getElementById('room')
+  const user = document.getElementById('user')
+  const output = document.getElementById('output')
+  const input = document.getElementById('input')
+  let ws
+  const print = (message, chroma, bold, send) => {
+    const d = document.createElement('div')
+    if (chroma) d.style.color = chroma
+    if (bold) d.style.fontWeight = 'bold'
+    d.style.width = '100%'
+    d.style.overflowWrap = 'anywhere'
+    d.textContent = message
+    output.appendChild(d)
+    d.scrollIntoView()
+    if (send) d.onclick = () => { input.value = message }
+  }
+  const unprint = () => {
+    output.lastElementChild.remove()
+  }
+  const tryparse = (text) => {
+    try {
+      return JSON.parse(text)
+    } catch (e) {
+      return null
+    }
+  }
+  document.getElementById('open').onclick = (evt) => {
+    if (ws) {
+      return false
+    }
+    ws = new WebSocket(
+      (location.protocol === 'https:' ? 'wss:' : 'ws:') +
+      '//' + location.host + '/room/' + room.value + '/channel'
+    )
+    print('CONNECTING', '#aaa', true)
+    ws.onopen = (evt) => {
+      unprint()
+      print('OPEN', '#4b6', true)
+      input.value = '{\n  "type": "ready"\n}'
+    }
+    ws.onclose = (evt) => {
+      print('CLOSE', '#888', true)
+      ws = null
+    }
+    ws.onmessage = (evt) => {
+      print('RECEIVE', '#46f', true)
+      print(evt.data, '#238')
+      const obj = tryparse(evt.data)
+      const hostId = host.value
+    }
+    ws.onerror = (evt) => {
+      unprint()
+      print('ERROR: see console', '#f64', true)
+      console.log(evt)
+    }
+    return false
+  }
+  document.getElementById('send').onclick = (evt) => {
+    if (!ws) {
+      return false
+    }
+    print('SEND', '#f6a', true)
+    print(input.value, '#835', false, true)
+    ws.send(input.value)
+    const obj = tryparse(input.value)
+    return false
+  }
+  document.getElementById('close').onclick = function(evt) {
+    if (!ws) {
+      return false
+    }
+    ws.close()
+    return false
+  }
+})
+</script>
+</head>
+<body>
+<table style='padding: 12px; width: 100%'>
+<tr><td valign='top' width='30%'>
+<p>
+房间
+<input id='room' type='text' value='~ room ~'>
+</p><p>
+玩家
+<input id='host' type='text' value='~ id ~'>
+</p><p>
+<button id='open'>Open</button>
+<button id='close'>Close</button>
+</p><p>
+<textarea id='input' rows='7'>
+</textarea>
+<p>
+<button id='send'>Send</button>
+</p>
+</td><td valign='top' width='70%'>
+<div id='output' style='max-height: 500px; overflow: scroll'></div>
+</td></tr></table>
+</body>
+</html>
