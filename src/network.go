@@ -248,6 +248,11 @@ func avatarHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "avatar "+handle)
 }
 
+func profileListMyHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth(w, r)
+	write(w, 200, ProfileListByCreatorRepr(user.Id))
+}
+
 func roomCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 	user := auth(w, r)
 	if err := r.ParseForm(); err != nil {
@@ -455,6 +460,7 @@ func ServerListen() {
 	mux.HandleFunc("POST /profile/{profile_id}/update", profileUpdateHandler)
 	mux.HandleFunc("GET /profile/{profile_id}", profileGetHandler)
 	mux.HandleFunc("GET /profile/{profile_id}/avatar", avatarHandler)
+	mux.HandleFunc("GET /profile/my", profileListMyHandler)
 
 	mux.HandleFunc("POST /room/create", roomCreateHandler)
 	mux.HandleFunc("POST /room/{room_id}/update", roomUpdateHandler)

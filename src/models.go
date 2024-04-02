@@ -292,6 +292,39 @@ func (p *Profile) Load() bool {
 	return true
 }
 
+func ProfileListByCreatorRepr(creatorUserId int) []OrderedKeysMarshal {
+	rows, err := db.Query(
+		`SELECT id, details, stats, traits FROM profile WHERE creator = $1`,
+		creatorUserId,
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	profiles := []OrderedKeysMarshal{}
+	for rows.Next() {
+		p := Profile{Creator: creatorUserId}
+		var stats, traits string
+		if err := rows.Scan(
+			&p.Id,
+			&p.Details,
+			&stats,
+			&traits,
+		); err != nil {
+			panic(err)
+		}
+		if p.Stats, err = parseProfileStats(stats); err != nil {
+			panic(err)
+		}
+		p.Traits = parseProfileTraits(traits)
+		profiles = append(profiles, p.Repr())
+	}
+	if err := rows.Err(); err != nil {
+		panic(err)
+	}
+	return profiles
+}
+
 type Room struct {
 	Id          string
 	Creator     int

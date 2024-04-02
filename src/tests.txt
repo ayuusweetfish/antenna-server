@@ -5,6 +5,7 @@ curl -v -c jar.txt http://localhost:10405/log-in -d 'id=1&password=111'
 curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/create --data-urlencode 'details={"gender":2,"orientation":5,"race":"elf"}' -d 'stats=18,17,16,15,14,13,12,11&traits=t1,t2,t3'
 curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/1/update -d 'stats=21,22,23,24,25,26,27,28'
 curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/1
+curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/my
 
 curl -v -b jar.txt -c jar.txt http://localhost:10405/room/create -d 'title=Title&tags=tag1,tag2&description=Lorem+ipsum'
 curl -v -b jar.txt -c jar.txt http://localhost:10405/room/1/update -d 'title=Title111'
