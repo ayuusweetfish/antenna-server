@@ -73,6 +73,14 @@
 响应 200
 - (Profile) 修改后的档案
 
+### 🟢 删除档案 GET /profile/{profile_id}/delete
+
+请求
+- 无参数
+
+响应 200
+- 空对象 {}
+
 ### 🔵 获取档案 GET /profile/{profile_id}
 
 响应 200

@@ -6,6 +6,7 @@ curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/create --data-urlen
 curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/1/update -d 'stats=21,22,23,24,25,26,27,28'
 curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/1
 curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/my
+curl -v -b jar.txt -c jar.txt http://localhost:10405/profile/1/delete -X POST
 
 curl -v -b jar.txt -c jar.txt http://localhost:10405/room/create -d 'title=Title&tags=tag1,tag2&description=Lorem+ipsum'
 curl -v -b jar.txt -c jar.txt http://localhost:10405/room/1/update -d 'title=Title111'

@@ -292,6 +292,13 @@ func (p *Profile) Load() bool {
 	return true
 }
 
+func (p *Profile) Delete() {
+	_, err := db.Exec(`DELETE FROM profile WHERE id = $1`, p.Id)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func ProfileListByCreatorRepr(creatorUserId int) []OrderedKeysMarshal {
 	rows, err := db.Query(
 		`SELECT id, details, stats, traits FROM profile WHERE creator = $1`,

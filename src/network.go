@@ -229,6 +229,22 @@ func profileUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	profileCUHandler(w, r, false)
 }
 
+func profileDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth(w, r)
+
+	profileId := parseIntFromPathValue(r, "profile_id")
+	profile := Profile{Id: profileId}
+	if !profile.Load() {
+		panic("404 No such profile")
+	}
+	if profile.Creator != user.Id {
+		panic("403 Not creator")
+	}
+
+	profile.Delete()
+	write(w, 200, JsonMessage{})
+}
+
 func profileGetHandler(w http.ResponseWriter, r *http.Request) {
 	_ = auth(w, r)
 
@@ -458,6 +474,7 @@ func ServerListen() {
 
 	mux.HandleFunc("POST /profile/create", profileCreateHandler)
 	mux.HandleFunc("POST /profile/{profile_id}/update", profileUpdateHandler)
+	mux.HandleFunc("POST /profile/{profile_id}/delete", profileDeleteHandler)
 	mux.HandleFunc("GET /profile/{profile_id}", profileGetHandler)
 	mux.HandleFunc("GET /profile/{profile_id}/avatar", avatarHandler)
 	mux.HandleFunc("GET /profile/my", profileListMyHandler)
