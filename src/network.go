@@ -13,6 +13,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -423,6 +424,21 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 	}(c, outChannel)
 }
 
+func versionInfoHandler(w http.ResponseWriter, r *http.Request) {
+	var vcsRev string
+	var vcsTime string
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range info.Settings {
+			if s.Key == "vcs.revision" {
+				vcsRev = s.Value
+			} else if s.Key == "vcs.time" {
+				vcsTime = s.Value
+			}
+		}
+	}
+	fmt.Fprintf(w, "Time %s\nHash %s\n", vcsTime, vcsRev)
+}
+
 var testCounter = 0
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
@@ -470,6 +486,8 @@ func (h *errCaptureHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func ServerListen() {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", versionInfoHandler)
+
 	mux.HandleFunc("POST /sign-up", signUpHandler)
 	mux.HandleFunc("POST /log-in", logInHandler)
 
