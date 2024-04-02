@@ -58,7 +58,7 @@ window.addEventListener('load', function(evt) {
     ws.onopen = (evt) => {
       unprint()
       print('OPEN', '#4b6', true)
-      input.value = '{\n  "type": "ready"\n}'
+      input.value = JSON.stringify({"type": "seat", "profile_id": 14}, undefined, 2)
     }
     ws.onclose = (evt) => {
       print('CLOSE', '#888', true)
