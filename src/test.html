@@ -29,11 +29,11 @@ window.addEventListener('load', function(evt) {
       if (chroma) d.style.color = chroma
       if (bold) d.style.fontWeight = 'bold'
       d.textContent = message
-      d.scrollIntoView()
       if (send) d.onclick = () => { input.value = message }
       w.appendChild(d)
     }
     output.appendChild(w)
+    w.scrollIntoView()
   }
   const unprint = () => {
     output.lastElementChild.remove()
@@ -70,7 +70,6 @@ window.addEventListener('load', function(evt) {
         [evt.data, '#238'],
       )
       const obj = tryparse(evt.data)
-      const hostId = host.value
     }
     ws.onerror = (evt) => {
       unprint()

@@ -394,6 +394,8 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		gameRoom.Lost(playerIndex)
+
 		c.Close()
 		close(outChannel)
 	}(c, outChannel)
