@@ -278,6 +278,14 @@ func roomCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 	}
 
 	room.Save()
+
+	if createNew {
+		go GameRoomRun(room)
+		if Config.Debug {
+			log.Printf("Visit http://localhost:%d/test/%s for testing\n", Config.Port, room.Id)
+		}
+	}
+
 	write(w, 200, room.Repr())
 }
 func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
@@ -311,6 +319,11 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 		panic("404 No such room")
 	}
 
+	gameRoom := GameRoomFind(room.Id)
+	if gameRoom == nil {
+		panic("404 Room closed")
+	}
+
 	// Establish the WebSocket connection
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -325,14 +338,15 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
-	// `inChannel`: messages received from the client
 	// `outChannel`: messages to be sent to the client
-	inChannel := make(chan map[string]interface{}, 3)
 	outChannel := make(chan interface{}, 3)
+
+	// Add to the room
+	playerIndex := gameRoom.Join(user, outChannel)
 
 	// Goroutine that keeps reading JSON from the WebSocket connection
 	// and pushes them to `inChannel`
-	go func(c *websocket.Conn, inChannel chan map[string]interface{}) {
+	go func(c *websocket.Conn) {
 		var object map[string]interface{}
 		for {
 			if err := c.ReadJSON(&object); err != nil {
@@ -348,34 +362,23 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				break
 			}
-			inChannel <- object
+			gameRoom.InChannel <- GameRoomInMessage{
+				PlayerIndex: playerIndex,
+				Message:     object,
+			}
 		}
-		close(inChannel)
-	}(c, inChannel)
+	}(c)
 
-	go func(c *websocket.Conn, inChannel chan map[string]interface{}, outChannel chan interface{}) {
-		outChannel <- OrderedKeysMarshal{
-			{"message", "Hello " + user.Nickname},
-			{"room", room.Repr()},
-		}
-
+	go func(c *websocket.Conn, outChannel chan interface{}) {
 		pingTicker := time.NewTicker(5 * time.Second)
 		defer pingTicker.Stop()
 
 	messageLoop:
-		for inChannel != nil && outChannel != nil {
+		for {
 			select {
-			case object, ok := <-inChannel:
-				if !ok {
-					inChannel = nil
-					break messageLoop
-				}
-				// handlePlayerMessage(player, object)
-				object["message"] = "Response"
-				outChannel <- object
-
 			case object := <-outChannel:
 				if object == nil {
+					// Signal to close connection
 					break messageLoop
 				}
 				if err := c.WriteJSON(object); err != nil {
@@ -392,12 +395,8 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		c.Close()
-
-		// Even if `inChannel` has not been closed,
-		// it will be closed after the error triggered
-		// in the goroutine by `c.Close()`.
 		close(outChannel)
-	}(c, inChannel, outChannel)
+	}(c, outChannel)
 }
 
 var testCounter = 0
@@ -467,9 +466,6 @@ func ServerListen() {
 
 	port := Config.Port
 	log.Printf("Listening on http://localhost:%d/\n", port)
-	if Config.Debug {
-		log.Printf("Visit http://localhost:%d/test for testing\n", port)
-	}
 	server := &http.Server{
 		Handler:      &errCaptureHandler{Handler: mux},
 		Addr:         fmt.Sprintf("localhost:%d", port),
