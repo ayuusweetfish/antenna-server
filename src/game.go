@@ -100,7 +100,6 @@ loop:
 				{"message", "received"},
 				{"object", msg.Message},
 			}
-			timeoutTicker.Reset(timeoutDur)
 
 		case sig := <-r.Signal:
 			if sigNewConn, ok := sig.(GameRoomSignalNewConn); ok {
@@ -111,17 +110,22 @@ loop:
 					{"message", "Hello " + conn.User.Nickname},
 					{"room", room.Repr()},
 				}
+				timeoutTicker.Stop()
 			}
 			if sigNewConn, ok := sig.(GameRoomSignalLostConn); ok {
 				println("connection lost ", sigNewConn.UserId)
+				r.Mutex.RLock()
+				n := len(r.Conns)
+				r.Mutex.RUnlock()
+				if n == 0 {
+					timeoutTicker.Reset(timeoutDur)
+				}
 			}
-			timeoutTicker.Reset(timeoutDur)
 
 		// Debug
 		case <-hahaTicker.C:
 			r.Mutex.RLock()
 			n := len(r.Conns)
-			r.Mutex.RUnlock()
 			for userId, conn := range r.Conns {
 				conn.OutChannel <- OrderedKeysMarshal{
 					{"message", "haha"},
@@ -129,6 +133,7 @@ loop:
 					{"count", n},
 				}
 			}
+			r.Mutex.RUnlock()
 
 		case <-timeoutTicker.C:
 			r.Closed = true
