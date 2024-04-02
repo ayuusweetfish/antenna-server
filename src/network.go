@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"strconv"
@@ -487,10 +488,14 @@ func ServerListen() {
 	if Config.Debug {
 		mux.HandleFunc("GET /test", testHandler)
 		mux.HandleFunc("GET /test/{room_id}", testHandler)
+		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
 	}
 
 	port := Config.Port
 	log.Printf("Listening on http://localhost:%d/\n", port)
+	if Config.Debug {
+		log.Printf("Visit http://localhost:%d/debug/pprof/ for profiling stats\n", port)
+	}
 	server := &http.Server{
 		Handler:      &errCaptureHandler{Handler: mux},
 		Addr:         fmt.Sprintf("localhost:%d", port),
