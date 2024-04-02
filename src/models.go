@@ -102,10 +102,11 @@ func (m DirectMarshal) MarshalJSON() ([]byte, error) {
 	return bytes, nil
 }
 
-type OrderedKeysMarshal []struct {
+type OrderedKeysEntry struct {
 	key   string
 	value interface{}
 }
+type OrderedKeysMarshal []OrderedKeysEntry
 
 func (m OrderedKeysMarshal) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer

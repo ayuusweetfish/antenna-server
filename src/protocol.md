@@ -140,10 +140,10 @@
   - "assembly" —— 组建中，等待参与者进入、选择角色档案
   - "appointment" —— 选择起始玩家
   - "gameplay" —— 游戏进行中
-- **appointment_status** (undefined | object) 游戏状态（「选择起始玩家」阶段 —— phase: "apoointment"）
+- **appointment_status** (undefined | object) 游戏状态（「选择起始玩家」阶段 —— **phase**: "apoointment"）
   - **holder** (number) 当前轮到的玩家编号（从 0 开始）
   - **timer** (number) 当前玩家的剩余时间，以秒计
-- **gameplay_status** (undefined | object) 游戏状态（「游戏进行中」阶段 —— phase: "gameplay"）
+- **gameplay_status** (undefined | object) 游戏状态（「游戏进行中」阶段 —— **phase**: "gameplay"）
   - **act_count** (number) 当前幕数（从 1 开始）
   - **turn_count** (number) 当前轮数（从 1 开始）
   - **move_count** (number) 当前回合数（从 1 开始）
@@ -164,7 +164,7 @@
 #### ⬆️ 坐下 "seat"
 房间组建期间，玩家发送此消息，确认所选的角色档案。
 
-- 无额外参数
+- **profile_id** (number) 所选的角色档案 ID
 
 完成后，服务端广播一条 **组建期间房间状态更新 "assembly_update"** 消息。
 

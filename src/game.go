@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+////// Connections and signals //////
+
 type WebSocketConn struct {
 	User
 	OutChannel chan interface{}
@@ -25,12 +27,68 @@ type GameRoomSignalReEstConn struct {
 	UserId int
 }
 
-type GameplayState struct {
-	Players []struct {
-		User
-		Profile
-	}
+////// Gameplay //////
+
+type GameplayPhaseStatusAssembly struct {
 }
+type GameplayPhaseStatusAppointment struct {
+	holder int
+}
+type GameplayPhaseStatusGamelay struct {
+}
+type GameplayPlayer struct {
+	User
+	Profile
+}
+type GameplayState struct {
+	Players     []GameplayPlayer
+	PhaseStatus interface{}
+}
+
+func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
+	// Players
+	playerReprs := []OrderedKeysMarshal{}
+	for _, p := range s.Players {
+		if p.Profile.Id > 0 {
+			playerReprs = append(playerReprs, p.Profile.Repr())
+		} else {
+			playerReprs = append(playerReprs, OrderedKeysMarshal{
+				{"id", nil},
+				{"creator", p.User.Repr()},
+			})
+		}
+	}
+
+	// Phase
+	var phaseName string
+	var statusRepr OrderedKeysMarshal
+	switch ps := s.PhaseStatus.(type) {
+	case GameplayPhaseStatusAssembly:
+		phaseName = "assembly"
+		statusRepr = nil
+
+	case GameplayPhaseStatusAppointment:
+		phaseName = "appointment"
+		statusRepr = OrderedKeysMarshal{
+			{"holder", ps.holder},
+		}
+
+	case GameplayPhaseStatusGamelay:
+		phaseName = "gameplay"
+		statusRepr = OrderedKeysMarshal{}
+	}
+
+	entries := OrderedKeysMarshal{
+		{"players", playerReprs},
+		{"phase", phaseName},
+	}
+	if statusRepr != nil {
+		entries = append(entries, OrderedKeysEntry{phaseName + "_status", statusRepr})
+	}
+	return entries
+}
+
+////// Room //////
 
 type GameRoom struct {
 	Room
@@ -72,6 +130,17 @@ func (r *GameRoom) Lost(userId int) {
 	}
 }
 
+// Assumes the mutex is held (RLock'ed)
+func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
+	user := r.Conns[userId].User
+	entries := OrderedKeysMarshal{
+		{"user", user.Repr()}, // Debug usage
+		{"room", r.Room.Repr()},
+	}
+	entries = append(entries, r.Gameplay.Repr(userId)...)
+	return entries
+}
+
 // Should be run in a goroutine
 func GameRoomRun(room Room) {
 	GameRoomDataMutex.Lock()
@@ -85,7 +154,11 @@ func GameRoomRun(room Room) {
 		Conns:     map[int]WebSocketConn{},
 		InChannel: make(chan GameRoomInMessage, 4),
 		Signal:    make(chan interface{}, 2),
-		Mutex:     &sync.RWMutex{},
+		Gameplay: GameplayState{
+			Players:     []GameplayPlayer{},
+			PhaseStatus: GameplayPhaseStatusAssembly{},
+		},
+		Mutex: &sync.RWMutex{},
 	}
 	GameRoomMap[room.Id] = r
 	GameRoomDataMutex.Unlock()
@@ -94,7 +167,7 @@ func GameRoomRun(room Room) {
 	timeoutTicker := time.NewTicker(timeoutDur)
 	defer timeoutTicker.Stop()
 
-	hahaTicker := time.NewTicker(1 * time.Second)
+	hahaTicker := time.NewTicker(10 * time.Second)
 	defer hahaTicker.Stop()
 
 loop:
@@ -111,14 +184,12 @@ loop:
 
 		case sig := <-r.Signal:
 			if sigNewConn, ok := sig.(GameRoomSignalNewConn); ok {
+				timeoutTicker.Stop()
 				r.Mutex.RLock()
 				conn := r.Conns[sigNewConn.UserId]
+				message := r.StateMessage(sigNewConn.UserId)
 				r.Mutex.RUnlock()
-				conn.OutChannel <- OrderedKeysMarshal{
-					{"message", "Hello " + conn.User.Nickname},
-					{"room", room.Repr()},
-				}
-				timeoutTicker.Stop()
+				conn.OutChannel <- message
 			}
 			if sigNewConn, ok := sig.(GameRoomSignalLostConn); ok {
 				println("connection lost ", sigNewConn.UserId)
