@@ -364,7 +364,7 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 	outChannel := make(chan interface{}, 3)
 
 	// Add to the room
-	playerIndex := gameRoom.Join(user, outChannel)
+	gameRoom.Join(user, outChannel)
 
 	// Goroutine that keeps reading JSON from the WebSocket connection
 	// and pushes them to `inChannel`
@@ -385,8 +385,8 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			gameRoom.InChannel <- GameRoomInMessage{
-				PlayerIndex: playerIndex,
-				Message:     object,
+				UserId:  user.Id,
+				Message: object,
 			}
 		}
 	}(c)
@@ -416,7 +416,7 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		gameRoom.Lost(playerIndex)
+		gameRoom.Lost(user.Id)
 
 		c.Close()
 		close(outChannel)

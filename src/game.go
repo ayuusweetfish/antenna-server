@@ -11,27 +11,27 @@ type WebSocketConn struct {
 }
 
 type GameRoomInMessage struct {
-	PlayerIndex int
-	Message     map[string]interface{}
+	UserId  int
+	Message map[string]interface{}
 }
 
 type GameRoomSignalNewConn struct {
-	PlayerIndex int
+	UserId int
 }
 type GameRoomSignalLostConn struct {
-	PlayerIndex int
+	UserId int
 }
 type GameRoomSignalReEstConn struct {
-	PlayerIndex int
+	UserId int
 }
 
 type GameRoom struct {
 	Room
 	Closed    bool
-	Conns     []WebSocketConn
+	Conns     map[int]WebSocketConn
 	InChannel chan GameRoomInMessage
 	Signal    chan interface{}
-	Mutex     *sync.Mutex
+	Mutex     *sync.RWMutex
 }
 
 var GameRoomDataMutex = &sync.Mutex{}
@@ -44,22 +44,22 @@ func GameRoomFind(roomId string) *GameRoom {
 func (r *GameRoom) Join(user User, channel chan interface{}) int {
 	r.Mutex.Lock()
 	playerIndex := len(r.Conns)
-	r.Conns = append(r.Conns, WebSocketConn{User: user, OutChannel: channel})
+	r.Conns[user.Id] = WebSocketConn{User: user, OutChannel: channel}
 	r.Mutex.Unlock()
 	r.Signal <- GameRoomSignalNewConn{
-		PlayerIndex: playerIndex,
+		UserId: user.Id,
 	}
 	return playerIndex
 }
 
-func (r *GameRoom) Lost(playerIndex int) {
+func (r *GameRoom) Lost(userId int) {
 	r.Mutex.Lock()
-	r.Conns[playerIndex].OutChannel = nil
+	delete(r.Conns, userId)
 	closed := r.Closed
 	r.Mutex.Unlock()
 	if !closed {
 		r.Signal <- GameRoomSignalLostConn{
-			PlayerIndex: playerIndex,
+			UserId: userId,
 		}
 	}
 }
@@ -74,15 +74,16 @@ func GameRoomRun(room Room) {
 	r := &GameRoom{
 		Room:      room,
 		Closed:    false,
-		Conns:     []WebSocketConn{},
+		Conns:     map[int]WebSocketConn{},
 		InChannel: make(chan GameRoomInMessage, 4),
 		Signal:    make(chan interface{}, 2),
-		Mutex:     &sync.Mutex{},
+		Mutex:     &sync.RWMutex{},
 	}
 	GameRoomMap[room.Id] = r
 	GameRoomDataMutex.Unlock()
 
-	timeoutTicker := time.NewTicker(5 * time.Second)
+	timeoutDur := 30 * time.Second
+	timeoutTicker := time.NewTicker(timeoutDur)
 	defer timeoutTicker.Stop()
 
 	hahaTicker := time.NewTicker(1 * time.Second)
@@ -92,36 +93,40 @@ loop:
 	for {
 		select {
 		case msg := <-r.InChannel:
-			conn := r.Conns[msg.PlayerIndex]
+			r.Mutex.RLock()
+			conn := r.Conns[msg.UserId]
+			r.Mutex.RUnlock()
 			conn.OutChannel <- OrderedKeysMarshal{
 				{"message", "received"},
 				{"object", msg.Message},
 			}
-			timeoutTicker.Reset(5 * time.Second)
+			timeoutTicker.Reset(timeoutDur)
 
 		case sig := <-r.Signal:
 			if sigNewConn, ok := sig.(GameRoomSignalNewConn); ok {
-				conn := r.Conns[sigNewConn.PlayerIndex]
+				r.Mutex.RLock()
+				conn := r.Conns[sigNewConn.UserId]
+				r.Mutex.RUnlock()
 				conn.OutChannel <- OrderedKeysMarshal{
 					{"message", "Hello " + conn.User.Nickname},
-					{"player_index", sigNewConn.PlayerIndex},
 					{"room", room.Repr()},
 				}
 			}
 			if sigNewConn, ok := sig.(GameRoomSignalLostConn); ok {
-				conn := &r.Conns[sigNewConn.PlayerIndex]
-				conn.OutChannel = nil
+				println("connection lost ", sigNewConn.UserId)
 			}
-			timeoutTicker.Reset(5 * time.Second)
+			timeoutTicker.Reset(timeoutDur)
 
 		// Debug
 		case <-hahaTicker.C:
-			for i, conn := range r.Conns {
-				if conn.OutChannel != nil {
-					conn.OutChannel <- OrderedKeysMarshal{
-						{"message", "haha"},
-						{"player_index", i},
-					}
+			r.Mutex.RLock()
+			n := len(r.Conns)
+			r.Mutex.RUnlock()
+			for userId, conn := range r.Conns {
+				conn.OutChannel <- OrderedKeysMarshal{
+					{"message", "haha"},
+					{"user_id", userId},
+					{"count", n},
 				}
 			}
 
@@ -136,8 +141,6 @@ loop:
 
 	// Close all remaining channels
 	for _, conn := range r.Conns {
-		if conn.OutChannel != nil {
-			conn.OutChannel <- nil
-		}
+		conn.OutChannel <- nil
 	}
 }
