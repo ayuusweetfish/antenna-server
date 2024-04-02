@@ -304,6 +304,8 @@ var upgrader = websocket.Upgrader{
 }
 
 func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth(w, r)
+
 	room := Room{Id: r.PathValue("room_id")}
 	if !room.Load() {
 		panic("404 No such room")
@@ -352,7 +354,10 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 	}(c, inChannel)
 
 	go func(c *websocket.Conn, inChannel chan map[string]interface{}, outChannel chan interface{}) {
-		outChannel <- map[string]interface{}{"message": "Hello", "room_id": room.Id}
+		outChannel <- OrderedKeysMarshal{
+			{"message", "Hello " + user.Nickname},
+			{"room", room.Repr()},
+		}
 
 		pingTicker := time.NewTicker(5 * time.Second)
 		defer pingTicker.Stop()

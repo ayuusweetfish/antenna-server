@@ -2,23 +2,38 @@
 <html>
 <head>
 <meta charset='utf-8'>
-<script>  
+<style>
+#output div.block {
+  margin: 0.8ex 0;
+}
+#output div.line {
+  margin: 0.1ex 0;
+  width: 100;
+  overflow-wrap: anywhere;
+}
+</style>
+<script>
 window.addEventListener('load', function(evt) {
   const room = document.getElementById('room')
   const user = document.getElementById('user')
   const output = document.getElementById('output')
   const input = document.getElementById('input')
   let ws
-  const print = (message, chroma, bold, send) => {
-    const d = document.createElement('div')
-    if (chroma) d.style.color = chroma
-    if (bold) d.style.fontWeight = 'bold'
-    d.style.width = '100%'
-    d.style.overflowWrap = 'anywhere'
-    d.textContent = message
-    output.appendChild(d)
-    d.scrollIntoView()
-    if (send) d.onclick = () => { input.value = message }
+  const print = (...args) => {
+    const w = document.createElement('div')
+    w.classList.add('block')
+    if (!(args[0] instanceof Array)) args = [args]
+    for (const [message, chroma, bold, send] of args) {
+      const d = document.createElement('div')
+      d.classList.add('line')
+      if (chroma) d.style.color = chroma
+      if (bold) d.style.fontWeight = 'bold'
+      d.textContent = message
+      d.scrollIntoView()
+      if (send) d.onclick = () => { input.value = message }
+      w.appendChild(d)
+    }
+    output.appendChild(w)
   }
   const unprint = () => {
     output.lastElementChild.remove()
@@ -34,6 +49,7 @@ window.addEventListener('load', function(evt) {
     if (ws) {
       return false
     }
+    document.cookie = 'auth=!' + user.value + '; SameSite=Strict; Path=/; Secure; Max-Age=604800'
     ws = new WebSocket(
       (location.protocol === 'https:' ? 'wss:' : 'ws:') +
       '//' + location.host + '/room/' + room.value + '/channel'
@@ -49,8 +65,10 @@ window.addEventListener('load', function(evt) {
       ws = null
     }
     ws.onmessage = (evt) => {
-      print('RECEIVE', '#46f', true)
-      print(evt.data, '#238')
+      print(
+        ['RECEIVE', '#46f', true],
+        [evt.data, '#238'],
+      )
       const obj = tryparse(evt.data)
       const hostId = host.value
     }
@@ -65,8 +83,10 @@ window.addEventListener('load', function(evt) {
     if (!ws) {
       return false
     }
-    print('SEND', '#f6a', true)
-    print(input.value, '#835', false, true)
+    print(
+      ['SEND', '#f6a', true],
+      [input.value, '#835', false, true],
+    )
     ws.send(input.value)
     const obj = tryparse(input.value)
     return false
@@ -89,7 +109,7 @@ window.addEventListener('load', function(evt) {
 <input id='room' type='text' value='~ room ~'>
 </p><p>
 玩家
-<input id='host' type='text' value='~ id ~'>
+<input id='user' type='text' value='~ id ~'>
 </p><p>
 <button id='open'>Open</button>
 <button id='close'>Close</button>
