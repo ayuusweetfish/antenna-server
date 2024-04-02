@@ -25,12 +25,20 @@ type GameRoomSignalReEstConn struct {
 	UserId int
 }
 
+type GameplayState struct {
+	Players []struct {
+		User
+		Profile
+	}
+}
+
 type GameRoom struct {
 	Room
 	Closed    bool
 	Conns     map[int]WebSocketConn
 	InChannel chan GameRoomInMessage
 	Signal    chan interface{}
+	Gameplay  GameplayState
 	Mutex     *sync.RWMutex
 }
 

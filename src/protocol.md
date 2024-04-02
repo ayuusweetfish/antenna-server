@@ -124,4 +124,69 @@
 
 ### 🟣 连接房间 GET /room/{room_id}/channel
 
-通过 WebSocket 建立连接，会收到一条“Hello”的消息。后续通信 TODO 🚧
+通过 WebSocket 建立连接。
+
+上下行每条消息均为 JSON 编码，均包含一个条目 **type** (string)，表示消息的类型。以下分别描述各类型消息的详情，⬇️表示下行方向（服务端向客户端）、⬆️表示上行方向（客户端向服务端）。
+
+#### ⬇️ 房间状态 "room_state"
+连接建立时，客户端收到一份此消息。
+
+- **room** (Room) 房间信息
+- **players** (Profile[]) 玩家（参与游戏的角色）列表
+  - 组建阶段包含所有房间内的玩家。对于尚未选择角色档案的玩家，条目如下
+    - **id** (null) null
+    - **creator** (User) 创建者
+- **phase** (string)
+  - "assembly" —— 组建中，等待参与者进入、选择角色档案
+  - "appointment" —— 选择起始玩家
+  - "gameplay" —— 游戏进行中
+- **appointment_status** (undefined | object) 游戏状态（「选择起始玩家」阶段 —— phase: "apoointment"）
+  - **holder** (number) 当前轮到的玩家编号（从 0 开始）
+  - **timer** (number) 当前玩家的剩余时间，以秒计
+- **gameplay_status** (undefined | object) 游戏状态（「游戏进行中」阶段 —— phase: "gameplay"）
+  - **act_count** (number) 当前幕数（从 1 开始）
+  - **turn_count** (number) 当前轮数（从 1 开始）
+  - **move_count** (number) 当前回合数（从 1 开始）
+  - **relationship** (number[N, 3]) 与其他玩家之间的关系评价
+  - **hand** (string[]) 当前玩家所持有的手牌
+  - **arena** (strings[]) 场上的关键词列表
+  - **holder** (number) 当前轮到的玩家编号（从 0 开始）
+  - **step** (string) 当前环节
+    - "selection" —— 正在选择手牌；此时下述 **action**、**keyword** 与 **target** 三项均为 null
+    - "storytelling_holder" —— 发起方正在讲述
+    - "storytelling_target" —— 被动方正在讲述
+  - **action** (null | number) 当前选择的行动牌
+  - **keyword** (null | number) 当前选择的关键词
+  - **target** (null | number) 行动的被动方玩家编号（从 0 开始）
+  - **timer** (number) 当前环节的剩余时间，以秒计
+  - **queue** (number[]) 当前举手排队的玩家列表，靠前的玩家最先轮到
+
+#### ⬆️ 坐下 "seat"
+房间组建期间，玩家发送此消息，确认所选的角色档案。
+
+- 无额外参数
+
+完成后，服务端广播一条 **组建期间房间状态更新 "assembly_update"** 消息。
+
+#### ⬆️ 离座 "withdraw"
+房间组建期间，玩家发送此消息，取消选择角色档案（即请求房主等待）。
+
+- 无额外参数
+
+完成后，服务端广播一条 **组建期间房间状态更新 "assembly_update"** 消息。
+
+#### ⬇️ 组建期间房间状态更新 "assembly_update"
+同 **房间状态 "room_state"**，但是只包含以下条目
+- **players**
+
+#### ⬆️ 开始游戏 "start"
+房间组建期间，房主发送此消息开始游戏。
+
+- 无额外参数
+
+完成后，服务端广播一条 **游戏开始 "start"** 消息，后接一条 **房间状态 "room_state"** 消息。
+
+#### ⬇️ 开始游戏 "start"
+房主确认开始游戏后，所有玩家（包括房主）收到一条此消息。
+
+- 无额外参数
