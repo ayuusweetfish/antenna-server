@@ -280,6 +280,7 @@ func roomCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 	room := Room{Id: 0}
 	if createNew {
 		room.Creator = user.Id
+		room.CreatedAt = time.Now().Unix()
 	} else {
 		room.Id = parseIntFromPathValue(r, "room_id")
 		if !room.Load() {
@@ -457,6 +458,10 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(s))
 }
 
+func dataInspectionHandler(w http.ResponseWriter, r *http.Request) {
+	ReadEverything(w)
+}
+
 // A handler that captures panics and return the error message as 500
 type errCaptureHandler struct {
 	Handler http.Handler
@@ -511,6 +516,7 @@ func ServerListen() {
 		mux.HandleFunc("GET /test", testHandler)
 		mux.HandleFunc("GET /test/{room_id}", testHandler)
 		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
+		mux.HandleFunc("GET /data", dataInspectionHandler)
 	}
 
 	port := Config.Port

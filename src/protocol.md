@@ -95,6 +95,7 @@
 
 - **id** (string) 房间号
 - **creator** (User) 房主
+- **created_at** (number) 创建时刻（Unix 时间戳，以秒计）
 - **title** (string) 房间名
 - **tags** (string[]) 世界观标签
 - **description** (string) 世界观简介

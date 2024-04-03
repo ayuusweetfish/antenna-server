@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -335,8 +336,8 @@ func ProfileListByCreatorRepr(creatorUserId int) []OrderedKeysMarshal {
 
 type Room struct {
 	Id          int
-	CreatedAt   int64
 	Creator     int
+	CreatedAt   int64
 	Title       string
 	Tags        string
 	Description string
@@ -345,8 +346,8 @@ type Room struct {
 func init() {
 	registerSchema("room",
 		"id INTEGER PRIMARY KEY",
-		"created_at INTEGER",
 		"creator INTEGER",
+		"created_at INTEGER",
 		"title TEXT",
 		"tags TEXT",
 		"description TEXT",
@@ -361,6 +362,7 @@ func (r *Room) Repr() OrderedKeysMarshal {
 	return OrderedKeysMarshal{
 		{"id", strconv.Itoa(r.Id)},
 		{"creator", creator.Repr()},
+		{"created_at", r.CreatedAt},
 		{"title", r.Title},
 		{"tags", strings.Split(r.Tags, ",")},
 		{"description", r.Description},
@@ -369,9 +371,9 @@ func (r *Room) Repr() OrderedKeysMarshal {
 
 func (r *Room) Load() bool {
 	err := db.QueryRow(
-		`SELECT created_at, creator, title, tags, description FROM room WHERE id = $1`,
+		`SELECT creator, created_at, title, tags, description FROM room WHERE id = $1`,
 		r.Id,
-	).Scan(&r.CreatedAt, &r.Creator, &r.Title, &r.Tags, &r.Description)
+	).Scan(&r.Creator, &r.CreatedAt, &r.Title, &r.Tags, &r.Description)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false
@@ -391,11 +393,55 @@ func (r *Room) CreateHandle() string {
 
 func (r *Room) Save() {
 	err := db.QueryRow(
-		`INSERT OR REPLACE INTO room (id, created_at, creator, title, tags, description) `+
+		`INSERT OR REPLACE INTO room (id, creator, created_at, title, tags, description) `+
 			`VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-		nullIfZero(r.Id), r.CreatedAt, r.Creator, r.Title, r.Tags, r.Description,
+		nullIfZero(r.Id), r.Creator, r.CreatedAt, r.Title, r.Tags, r.Description,
 	).Scan(&r.Id)
 	if err != nil {
 		panic(err)
+	}
+}
+
+func ReadEverything(w io.Writer) {
+	tables := []string{"user", "profile", "room"}
+	for _, table := range tables {
+		fmt.Fprintf(w, "%s\n", table)
+		rows, err := db.Query(`SELECT * FROM ` + table)
+		if err != nil {
+			panic(err)
+		}
+		defer rows.Close()
+		cols, err := rows.Columns()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Fprintf(w, "%s\n", strings.Join(cols, "\t"))
+		vals := make([]interface{}, len(cols))
+		for i, _ := range vals {
+			vals[i] = new(sql.NullString)
+		}
+		for rows.Next() {
+			err := rows.Scan(vals...)
+			if err != nil {
+				panic(err)
+			}
+			for i, val := range vals {
+				val := val.(*sql.NullString)
+				if i > 0 {
+					fmt.Fprintf(w, "\t")
+				}
+				if val.Valid {
+					fmt.Fprintf(w, "%s", val.String)
+				} else {
+					fmt.Fprintf(w, "null")
+				}
+			}
+			fmt.Fprintf(w, "\n")
+		}
+		if err := rows.Err(); err != nil {
+			panic(err)
+		}
+		rows.Close()
+		fmt.Fprintf(w, "\n\n")
 	}
 }
