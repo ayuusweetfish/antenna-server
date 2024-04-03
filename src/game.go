@@ -27,18 +27,31 @@ type GameRoomSignalLostConn struct {
 type GameRoomSignalReEstConn struct {
 	UserId int
 }
+type GameRoomSignalTimer struct {
+	Type string
+}
 
 ////// Miscellaneous utilities //////
 
 type PeekableTimer struct {
 	Timer   *time.Timer
 	Expires time.Time
+	Func    func()
 }
 
 func NewPeekableTimer(d time.Duration) PeekableTimer {
 	return PeekableTimer{
 		Timer:   time.NewTimer(d),
 		Expires: time.Now().Add(d),
+		Func:    nil,
+	}
+}
+
+func NewPeekableTimerFunc(d time.Duration, f func()) PeekableTimer {
+	return PeekableTimer{
+		Timer:   time.AfterFunc(d, f),
+		Expires: time.Now().Add(d),
+		Func:    f,
 	}
 }
 
@@ -47,9 +60,20 @@ func (t PeekableTimer) Remaining() time.Duration {
 }
 
 func (t *PeekableTimer) Reset(d time.Duration) {
-	t.Timer.Stop()
-	t.Timer.Reset(d)
+	if !t.Timer.Stop() {
+		if t.Func == nil {
+			t.Timer = time.NewTimer(d)
+		} else {
+			t.Timer = time.AfterFunc(d, t.Func)
+		}
+	} else {
+		t.Timer.Reset(d)
+	}
 	t.Expires = time.Now().Add(d)
+}
+
+func (t *PeekableTimer) Stop() {
+	t.Timer.Stop()
 }
 
 ////// Gameplay //////
@@ -58,8 +82,11 @@ type GameplayPhaseStatusAssembly struct {
 }
 type GameplayPhaseStatusAppointment struct {
 	Holder int
+	Count  int
+	Timer  PeekableTimer
 }
 type GameplayPhaseStatusGamelay struct {
+	Holder int
 }
 type GameplayPlayer struct {
 	User
@@ -100,11 +127,14 @@ func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
 		phaseName = "appointment"
 		statusRepr = OrderedKeysMarshal{
 			{"holder", ps.Holder},
+			{"timer", ps.Timer.Remaining().Seconds()},
 		}
 
 	case GameplayPhaseStatusGamelay:
 		phaseName = "gameplay"
-		statusRepr = OrderedKeysMarshal{}
+		statusRepr = OrderedKeysMarshal{
+			{"holder", ps.Holder},
+		}
 	}
 
 	entries := OrderedKeysMarshal{
@@ -138,11 +168,78 @@ func (s *GameplayState) WithdrawSeat(userId int) string {
 	return "Not seated"
 }
 
-func (s *GameplayState) Start() string {
+func (s *GameplayState) Start(roomSignalChannel chan interface{}) string {
+	if _, ok := s.PhaseStatus.(GameplayPhaseStatusAssembly); !ok {
+		return "Not in assembly phase"
+	}
 	s.PhaseStatus = GameplayPhaseStatusAppointment{
 		Holder: CloudRandom(len(s.Players)),
+		Count:  0,
+		Timer: NewPeekableTimerFunc(30*time.Second, func() {
+			roomSignalChannel <- GameRoomSignalTimer{Type: "appointment"}
+		}),
 	}
 	return ""
+}
+
+func (s GameplayState) PlayerIndex(userId int) int {
+	for i, p := range s.Players {
+		if p.User.Id == userId {
+			return i
+		}
+	}
+	return -1
+}
+func (s GameplayState) PlayerIndexNullable(userId int) interface{} {
+	i := s.PlayerIndex(userId)
+	if i == -1 {
+		return nil
+	} else {
+		return i
+	}
+}
+
+// A `userId` of -1 means on behealf of the current holder (i.e., skip the holder check)
+// Returns:
+// - the holder who has selected to skip (-1 denotes null)
+// - the next player to hold (if the next return value is `false`)
+// - the player to take the first move (if the next return value is `true`)
+// - the error message
+func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool) (int, int, bool, string) {
+	var st GameplayPhaseStatusAppointment
+	var ok bool
+	if st, ok = s.PhaseStatus.(GameplayPhaseStatusAppointment); !ok {
+		return -1, -1, false, "Not in appointment phase"
+	}
+	if userId != -1 && s.Players[st.Holder].User.Id != userId {
+		return -1, -1, false, "Not move holder"
+	}
+
+	if !accept {
+		st.Count++
+		if st.Count < 2*len(s.Players) {
+			// Continue
+			prev := st.Holder
+			st.Holder = (st.Holder + 1) % len(s.Players)
+			st.Timer.Reset(30 * time.Second)
+			s.PhaseStatus = st
+			return prev, st.Holder, false, ""
+		} else {
+			// Random appointment
+			st.Timer.Stop()
+			luckyDog := CloudRandom(len(s.Players))
+			s.PhaseStatus = GameplayPhaseStatusGamelay{
+				Holder: luckyDog,
+			}
+			return st.Holder, luckyDog, true, ""
+		}
+	} else {
+		st.Timer.Stop()
+		s.PhaseStatus = GameplayPhaseStatusGamelay{
+			Holder: st.Holder,
+		}
+		return -1, st.Holder, true, ""
+	}
 }
 
 ////// Room //////
@@ -189,18 +286,11 @@ func (r *GameRoom) Lost(userId int) {
 
 // Assumes the mutex is held (RLock'ed)
 func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
-	var myIndex interface{}
-	myIndex = nil
-	for i, p := range r.Gameplay.Players {
-		if p.User.Id == userId {
-			myIndex = i
-			break
-		}
-	}
 	entries := OrderedKeysMarshal{
 		{"type", "room_state"},
 		{"room", r.Room.Repr()},
-		{"my_index", myIndex},
+		{"players", r.Gameplay.PlayerReprs()},
+		{"my_index", r.Gameplay.PlayerIndexNullable(userId)},
 	}
 	entries = append(entries, r.Gameplay.Repr(userId)...)
 	return entries
@@ -208,10 +298,11 @@ func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
 
 func (r *GameRoom) BroadcastStart() {
 	r.Mutex.RLock()
-	for _, conn := range r.Conns {
+	for userId, conn := range r.Conns {
 		conn.OutChannel <- OrderedKeysMarshal{
 			{"type", "start"},
 			{"holder", r.Gameplay.PhaseStatus.(GameplayPhaseStatusAppointment).Holder},
+			{"my_index", r.Gameplay.PlayerIndexNullable(userId)},
 		}
 	}
 	r.Mutex.RUnlock()
@@ -227,12 +318,43 @@ func (r *GameRoom) BroadcastRoomState() {
 
 func (r *GameRoom) BroadcastAssemblyUpdate() {
 	r.Mutex.RLock()
-	playerReprs := r.Gameplay.PlayerReprs()
 	message := OrderedKeysMarshal{
 		{"type", "assembly_update"},
-		{"players", playerReprs},
+		{"players", r.Gameplay.PlayerReprs()},
 	}
 	for _, conn := range r.Conns {
+		conn.OutChannel <- message
+	}
+	r.Mutex.RUnlock()
+}
+
+func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, isStarting bool) {
+	r.Mutex.RLock()
+	for userId, conn := range r.Conns {
+		var message OrderedKeysMarshal
+		if isStarting {
+			var prevVal interface{}
+			if prevHolder == -1 {
+				prevVal = nil
+			} else {
+				prevVal = prevHolder
+			}
+			message = OrderedKeysMarshal{
+				{"type", "appointment_accept"},
+				{"prev_holder", prevVal},
+				// TODO
+				{"gameplay_status", OrderedKeysMarshal{
+					{"user_id", userId},
+					{"holder", nextHolder},
+				}},
+			}
+		} else {
+			message = OrderedKeysMarshal{
+				{"type", "appointment_pass"},
+				{"prev_holder", prevHolder},
+				{"next_holder", nextHolder},
+			}
+		}
 		conn.OutChannel <- message
 	}
 	r.Mutex.RUnlock()
@@ -303,11 +425,19 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 				panic(fmt.Sprintf("Player (ID %d) is not seated", userId))
 			}
 		}
-		if err := r.Gameplay.Start(); err != "" {
+		if err := r.Gameplay.Start(r.Signal); err != "" {
 			panic(err)
 		}
 		unlock()
 		r.BroadcastStart()
+	} else if message["type"] == "appointment_accept" || message["type"] == "appointment_pass" {
+		prevHolder, nextHolder, isStarting, err :=
+			r.Gameplay.AppointmentAcceptOrPass(msg.UserId, message["type"] == "appointment_accept")
+		if err != "" {
+			panic(err)
+		}
+		unlock()
+		r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
 	} else {
 		panic("Unknown type")
 	}
@@ -370,18 +500,31 @@ loop:
 					timeoutTimer.Reset(timeoutDur)
 				}
 			}
+			if sigTimer, ok := sig.(GameRoomSignalTimer); ok {
+				println("timer", sigTimer.Type)
+				switch sigTimer.Type {
+				case "appointment":
+					r.Mutex.Lock()
+					prevHolder, nextHolder, isStarting, err :=
+						r.Gameplay.AppointmentAcceptOrPass(-1, false)
+					r.Mutex.Unlock()
+					if err == "" {
+						r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
+					}
+				}
+			}
 
 		// Debug
 		case <-hahaTicker.C:
 			r.Mutex.RLock()
-			n := len(r.Conns)
+			/* n := len(r.Conns)
 			for userId, conn := range r.Conns {
 				conn.OutChannel <- OrderedKeysMarshal{
 					{"message", "haha"},
 					{"user_id", userId},
 					{"count", n},
 				}
-			}
+			} */
 			r.Mutex.RUnlock()
 
 		case <-timeoutTimer.C:
