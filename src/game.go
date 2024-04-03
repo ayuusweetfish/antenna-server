@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
@@ -22,7 +23,8 @@ type GameRoomSignalNewConn struct {
 	UserId int
 }
 type GameRoomSignalLostConn struct {
-	UserId int
+	UserId  int
+	Channel chan interface{}
 }
 type GameRoomSignalReEstConn struct {
 	UserId int
@@ -272,14 +274,14 @@ func (r *GameRoom) Join(user User, channel chan interface{}) int {
 	return playerIndex
 }
 
-func (r *GameRoom) Lost(userId int) {
+func (r *GameRoom) Lost(userId int, channel chan interface{}) {
 	r.Mutex.Lock()
-	delete(r.Conns, userId)
 	closed := r.Closed
 	r.Mutex.Unlock()
 	if !closed {
 		r.Signal <- GameRoomSignalLostConn{
-			UserId: userId,
+			UserId:  userId,
+			Channel: channel,
 		}
 	}
 }
@@ -383,7 +385,11 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 	unlock := sync.OnceFunc(r.Mutex.Unlock)
 	defer unlock()
 
-	conn = r.Conns[msg.UserId]
+	var ok bool
+	conn, ok = r.Conns[msg.UserId]
+	if !ok {
+		log.Printf("Connection handling goes wrong\n")
+	}
 	if message["type"] == "seat" {
 		user := conn.User
 		profileId, ok := message["profile_id"].(float64)
@@ -492,13 +498,15 @@ loop:
 				conn.OutChannel <- message
 			}
 			if sigLostConn, ok := sig.(GameRoomSignalLostConn); ok {
-				println("connection lost", sigLostConn.UserId)
 				r.Mutex.Lock()
-				delete(r.Conns, sigLostConn.UserId)
-				r.Mutex.Unlock()
-				if sigLostConn.UserId == room.Creator {
-					timeoutTimer.Reset(timeoutDur)
+				if r.Conns[sigLostConn.UserId].OutChannel == sigLostConn.Channel {
+					println("connection lost", sigLostConn.UserId)
+					delete(r.Conns, sigLostConn.UserId)
+					if sigLostConn.UserId == room.Creator {
+						timeoutTimer.Reset(timeoutDur)
+					}
 				}
+				r.Mutex.Unlock()
 			}
 			if sigTimer, ok := sig.(GameRoomSignalTimer); ok {
 				println("timer", sigTimer.Type)

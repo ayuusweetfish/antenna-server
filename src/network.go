@@ -422,7 +422,7 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		gameRoom.Lost(user.Id)
+		gameRoom.Lost(user.Id, outChannel)
 
 		c.Close()
 		close(outChannel)
