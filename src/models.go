@@ -403,9 +403,21 @@ func (r *Room) Save() {
 }
 
 func ReadEverything(w io.Writer) {
+	fmt.Fprintf(w, `
+<style>
+table, th, td {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-collapse: collapse;
+  padding: 0.3em 0.6em;
+}
+.null {
+  opacity: 0.3;
+}
+</style>
+`)
 	tables := []string{"user", "profile", "room"}
 	for _, table := range tables {
-		fmt.Fprintf(w, "%s\n", table)
+		fmt.Fprintf(w, "<h2>%s</h2>\n<table>\n", table)
 		rows, err := db.Query(`SELECT * FROM ` + table)
 		if err != nil {
 			panic(err)
@@ -415,7 +427,7 @@ func ReadEverything(w io.Writer) {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Fprintf(w, "%s\n", strings.Join(cols, "\t"))
+		fmt.Fprintf(w, "<thead><tr><th>%s</th></tr></thead>\n<tbody>\n", strings.Join(cols, "</th><th>"))
 		vals := make([]interface{}, len(cols))
 		for i, _ := range vals {
 			vals[i] = new(sql.NullString)
@@ -425,23 +437,24 @@ func ReadEverything(w io.Writer) {
 			if err != nil {
 				panic(err)
 			}
+			fmt.Fprintf(w, "<tr><td>")
 			for i, val := range vals {
 				val := val.(*sql.NullString)
 				if i > 0 {
-					fmt.Fprintf(w, "\t")
+					fmt.Fprintf(w, "</td><td>")
 				}
 				if val.Valid {
 					fmt.Fprintf(w, "%s", val.String)
 				} else {
-					fmt.Fprintf(w, "null")
+					fmt.Fprintf(w, "<span class='null'>null</span>")
 				}
 			}
-			fmt.Fprintf(w, "\n")
+			fmt.Fprintf(w, "</td></tr>\n")
 		}
 		if err := rows.Err(); err != nil {
 			panic(err)
 		}
 		rows.Close()
-		fmt.Fprintf(w, "\n\n")
+		fmt.Fprintf(w, "</tbody></table>\n")
 	}
 }

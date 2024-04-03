@@ -304,7 +304,7 @@ func roomCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 	room.Save()
 
 	if Config.Debug && createNew {
-		log.Printf("Visit http://localhost:%d/test/%d for testing\n", Config.Port, room.Id)
+		log.Printf("Visit http://localhost:%d/test/%d/%d for testing\n", Config.Port, room.Id, user.Id)
 	}
 
 	write(w, 200, room.Repr())
@@ -444,21 +444,20 @@ func versionInfoHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Time %s\nHash %s\n", vcsTime, vcsRev)
 }
 
-var testCounter = 0
-
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	content, err := os.ReadFile("test.html")
 	if err != nil {
 		panic("404 Cannot read page content")
 	}
 	s := string(content)
-	testCounter++
 	s = strings.Replace(s, "~ room ~", r.PathValue("room_id"), 1)
-	s = strings.Replace(s, "~ id ~", strconv.Itoa(testCounter), 1)
+	s = strings.Replace(s, "~ id ~", r.PathValue("player_id"), 1)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(s))
 }
 
 func dataInspectionHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	ReadEverything(w)
 }
 
@@ -515,6 +514,7 @@ func ServerListen() {
 	if Config.Debug {
 		mux.HandleFunc("GET /test", testHandler)
 		mux.HandleFunc("GET /test/{room_id}", testHandler)
+		mux.HandleFunc("GET /test/{room_id}/{player_id}", testHandler)
 		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
 		mux.HandleFunc("GET /data", dataInspectionHandler)
 	}
