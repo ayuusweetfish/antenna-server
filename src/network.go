@@ -367,7 +367,7 @@ func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// `outChannel`: messages to be sent to the client
-	outChannel := make(chan interface{}, 3)
+	outChannel := make(chan interface{}, 4)
 
 	// Add to the room
 	gameRoom.Join(user, outChannel)
@@ -484,7 +484,7 @@ func (h *errCaptureHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				http.Error(w, message, status)
 			} else {
-				message := fmt.Sprint("%v", obj)
+				message := fmt.Sprintf("%v", obj)
 				http.Error(w, message, 500)
 			}
 		}

@@ -33,7 +33,7 @@ type GameRoomSignalReEstConn struct {
 type GameplayPhaseStatusAssembly struct {
 }
 type GameplayPhaseStatusAppointment struct {
-	holder int
+	Holder int
 }
 type GameplayPhaseStatusGamelay struct {
 }
@@ -75,7 +75,7 @@ func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
 	case GameplayPhaseStatusAppointment:
 		phaseName = "appointment"
 		statusRepr = OrderedKeysMarshal{
-			{"holder", ps.holder},
+			{"holder", ps.Holder},
 		}
 
 	case GameplayPhaseStatusGamelay:
@@ -112,6 +112,13 @@ func (s *GameplayState) WithdrawSeat(userId int) string {
 		}
 	}
 	return "Not seated"
+}
+
+func (s *GameplayState) Start() string {
+	s.PhaseStatus = GameplayPhaseStatusAppointment{
+		Holder: CloudRandom(len(s.Players)),
+	}
+	return ""
 }
 
 ////// Room //////
@@ -158,14 +165,32 @@ func (r *GameRoom) Lost(userId int) {
 
 // Assumes the mutex is held (RLock'ed)
 func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
-	user := r.Conns[userId].User
+	var myIndex interface{}
+	myIndex = nil
+	for i, p := range r.Gameplay.Players {
+		if p.User.Id == userId {
+			myIndex = i
+			break
+		}
+	}
 	entries := OrderedKeysMarshal{
 		{"type", "room_state"},
-		{"user", user.Repr()}, // Debug usage
 		{"room", r.Room.Repr()},
+		{"my_index", myIndex},
 	}
 	entries = append(entries, r.Gameplay.Repr(userId)...)
 	return entries
+}
+
+func (r *GameRoom) BroadcastRoomState(extraMsg interface{}) {
+	r.Mutex.RLock()
+	for userId, conn := range r.Conns {
+		if extraMsg != nil {
+			conn.OutChannel <- extraMsg
+		}
+		conn.OutChannel <- r.StateMessage(userId)
+	}
+	r.Mutex.RUnlock()
 }
 
 func (r *GameRoom) BroadcastAssemblyUpdate() {
@@ -192,7 +217,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 			} else if str, ok := obj.(string); ok {
 				errorMsg = str
 			} else {
-				errorMsg = fmt.Sprint("%v", obj)
+				errorMsg = fmt.Sprintf("%v", obj)
 			}
 			conn.OutChannel <- OrderedKeysMarshal{{"error", errorMsg}}
 		}
@@ -233,6 +258,26 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if msg.UserId != r.Room.Creator {
 			panic("Not room creator")
 		}
+		// Ensure that all present players have seated
+		for userId, _ := range r.Conns {
+			seated := false
+			for _, p := range r.Gameplay.Players {
+				if p.User.Id == userId {
+					seated = true
+					break
+				}
+			}
+			if !seated {
+				panic(fmt.Sprintf("Player (ID %d) is not seated", userId))
+			}
+		}
+		if err := r.Gameplay.Start(); err != "" {
+			panic(err)
+		}
+		unlock()
+		r.BroadcastRoomState(OrderedKeysMarshal{
+			{"type", "start"},
+		})
 	} else {
 		panic("Unknown type")
 	}
@@ -286,12 +331,12 @@ loop:
 				r.Mutex.RUnlock()
 				conn.OutChannel <- message
 			}
-			if sigNewConn, ok := sig.(GameRoomSignalLostConn); ok {
-				println("connection lost", sigNewConn.UserId)
-				// r.Mutex.RLock()
-				// n := len(r.Conns)
-				// r.Mutex.RUnlock()
-				if sigNewConn.UserId == room.Creator {
+			if sigLostConn, ok := sig.(GameRoomSignalLostConn); ok {
+				println("connection lost", sigLostConn.UserId)
+				r.Mutex.Lock()
+				delete(r.Conns, sigLostConn.UserId)
+				r.Mutex.Unlock()
+				if sigLostConn.UserId == room.Creator {
 					timeoutTicker.Reset(timeoutDur)
 				}
 			}

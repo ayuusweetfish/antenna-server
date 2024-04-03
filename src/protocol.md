@@ -129,7 +129,7 @@
 
 房间不存在或已关闭时会返回 404 状态码并拒绝连接。（游戏尚未开始时，房主退出 3 分钟后房间关闭，房间内所有连接断开。房主重新进入后即再次开启。）
 
-上下行每条消息均为 JSON 编码，均包含一个条目 **type** (string)，表示消息的类型。以下分别描述各类型消息的详情，⬇️表示下行方向（服务端向客户端）、⬆️表示上行方向（客户端向服务端）。
+上下行每条消息均为 JSON 编码的对象，均包含一个条目 **type** (string)，表示消息的类型。以下分别描述各类型消息的详情，⬇️表示下行方向（服务端向客户端）、⬆️表示上行方向（客户端向服务端）。列出的条目与 **type** 同级。
 
 #### ⬇️ 房间状态 "room_state"
 连接建立时，客户端收到一份此消息。
@@ -139,19 +139,20 @@
   - 组建阶段包含所有房间内的玩家。对于尚未选择角色档案的玩家，条目如下
     - **id** (null) null
     - **creator** (User) 创建者
+- **my_index** (number | null) 自己在本场游戏中的玩家编号，对应 **players** 数组中的下标。未坐下（组建阶段）或旁观（游戏阶段）时为 null
 - **phase** (string)
   - "assembly" —— 组建中，等待参与者进入、选择角色档案
   - "appointment" —— 选择起始玩家
   - "gameplay" —— 游戏进行中
 - **appointment_status** (undefined | object) 游戏状态（「选择起始玩家」阶段 —— **phase**: "apoointment"）
   - **holder** (number) 当前轮到的玩家编号（从 0 开始）
-  - **timer** (number) 当前玩家的剩余时间，以秒计
+  - **timer** (number) 当前轮到玩家的剩余时间，以秒计
 - **gameplay_status** (undefined | object) 游戏状态（「游戏进行中」阶段 —— **phase**: "gameplay"）
   - **act_count** (number) 当前幕数（从 1 开始）
   - **turn_count** (number) 当前轮数（从 1 开始）
   - **move_count** (number) 当前回合数（从 1 开始）
-  - **relationship** (number[N, 3]) 与其他玩家之间的关系评价
-  - **hand** (string[]) 当前玩家所持有的手牌
+  - **relationship** (number[N, 3]) 自己与其他玩家之间的关系评价
+  - **hand** (string[]) 自己所持有的手牌
   - **arena** (strings[]) 场上的关键词列表
   - **holder** (number) 当前轮到的玩家编号（从 0 开始）
   - **step** (string) 当前环节
