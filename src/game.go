@@ -28,6 +28,30 @@ type GameRoomSignalReEstConn struct {
 	UserId int
 }
 
+////// Miscellaneous utilities //////
+
+type PeekableTimer struct {
+	Timer   *time.Timer
+	Expires time.Time
+}
+
+func NewPeekableTimer(d time.Duration) PeekableTimer {
+	return PeekableTimer{
+		Timer:   time.NewTimer(d),
+		Expires: time.Now().Add(d),
+	}
+}
+
+func (t PeekableTimer) Remaining() time.Duration {
+	return t.Expires.Sub(time.Now())
+}
+
+func (t *PeekableTimer) Reset(d time.Duration) {
+	t.Timer.Stop()
+	t.Timer.Reset(d)
+	t.Expires = time.Now().Add(d)
+}
+
 ////// Gameplay //////
 
 type GameplayPhaseStatusAssembly struct {
@@ -182,12 +206,20 @@ func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
 	return entries
 }
 
-func (r *GameRoom) BroadcastRoomState(extraMsg interface{}) {
+func (r *GameRoom) BroadcastStart() {
+	r.Mutex.RLock()
+	for _, conn := range r.Conns {
+		conn.OutChannel <- OrderedKeysMarshal{
+			{"type", "start"},
+			{"holder", r.Gameplay.PhaseStatus.(GameplayPhaseStatusAppointment).Holder},
+		}
+	}
+	r.Mutex.RUnlock()
+}
+
+func (r *GameRoom) BroadcastRoomState() {
 	r.Mutex.RLock()
 	for userId, conn := range r.Conns {
-		if extraMsg != nil {
-			conn.OutChannel <- extraMsg
-		}
 		conn.OutChannel <- r.StateMessage(userId)
 	}
 	r.Mutex.RUnlock()
@@ -275,9 +307,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 			panic(err)
 		}
 		unlock()
-		r.BroadcastRoomState(OrderedKeysMarshal{
-			{"type", "start"},
-		})
+		r.BroadcastStart()
 	} else {
 		panic("Unknown type")
 	}
@@ -306,8 +336,8 @@ func GameRoomRun(room Room, createdSignal chan *GameRoom) {
 	GameRoomMapMutex.Unlock()
 
 	timeoutDur := 180 * time.Second
-	timeoutTicker := time.NewTicker(timeoutDur)
-	defer timeoutTicker.Stop()
+	timeoutTimer := time.NewTimer(timeoutDur)
+	defer timeoutTimer.Stop()
 
 	hahaTicker := time.NewTicker(10 * time.Second)
 	defer hahaTicker.Stop()
@@ -323,7 +353,7 @@ loop:
 		case sig := <-r.Signal:
 			if sigNewConn, ok := sig.(GameRoomSignalNewConn); ok {
 				if sigNewConn.UserId == room.Creator {
-					timeoutTicker.Stop()
+					timeoutTimer.Stop()
 				}
 				r.Mutex.RLock()
 				conn := r.Conns[sigNewConn.UserId]
@@ -337,7 +367,7 @@ loop:
 				delete(r.Conns, sigLostConn.UserId)
 				r.Mutex.Unlock()
 				if sigLostConn.UserId == room.Creator {
-					timeoutTicker.Reset(timeoutDur)
+					timeoutTimer.Reset(timeoutDur)
 				}
 			}
 
@@ -354,7 +384,7 @@ loop:
 			}
 			r.Mutex.RUnlock()
 
-		case <-timeoutTicker.C:
+		case <-timeoutTimer.C:
 			r.Closed = true
 			GameRoomMapMutex.Lock()
 			delete(GameRoomMap, room.Id)

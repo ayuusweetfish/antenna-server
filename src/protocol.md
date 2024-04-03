@@ -144,8 +144,8 @@
   - "assembly" —— 组建中，等待参与者进入、选择角色档案
   - "appointment" —— 选择起始玩家
   - "gameplay" —— 游戏进行中
-- **appointment_status** (undefined | object) 游戏状态（「选择起始玩家」阶段 —— **phase**: "apoointment"）
-  - **holder** (number) 当前轮到的玩家编号（从 0 开始）
+- **appointment_status** (undefined | object) 游戏状态（「选择起始玩家」阶段 —— **phase**: "appointment"）
+  - **holder** (number) 当前轮到的玩家座位号（从 0 开始）
   - **timer** (number) 当前轮到玩家的剩余时间，以秒计
 - **gameplay_status** (undefined | object) 游戏状态（「游戏进行中」阶段 —— **phase**: "gameplay"）
   - **act_count** (number) 当前幕数（从 1 开始）
@@ -167,6 +167,8 @@
   - **timer** (number) 当前环节的剩余时间，以秒计
   - **queue** (number[]) 当前举手排队的玩家列表，靠前的玩家最先轮到
 
+后续消息也是类似，游戏过程中指代玩家均采用座位编号，即 **players** 中的下标，从 0 开始。考虑到多语言、文本编码等因素，卡牌与关键词均使用缩略名称，名称列表 🚧。
+
 #### ⬆️ 坐下 "seat"
 房间组建期间，玩家发送此消息，确认所选的角色档案。
 
@@ -183,16 +185,43 @@
 
 #### ⬇️ 组建期间房间状态更新 "assembly_update"
 同 **房间状态 "room_state"**，但是只包含以下条目
-- **players**
+- **players** (Profile[])
 
 #### ⬆️ 开始游戏 "start"
 房间组建期间，房主发送此消息开始游戏。
 
 - 无额外参数
 
-完成后，服务端广播一条 **游戏开始 "start"** 消息，后接一条 **房间状态 "room_state"** 消息。
+完成后，服务端广播一条 **游戏开始 "start"** 消息。
 
 #### ⬇️ 开始游戏 "start"
-房主确认开始游戏后，所有玩家（包括房主）收到一条此消息。
+房主确认开始游戏后，所有玩家（包括房主）收到一条此消息。房间此时进入「选择起始玩家」阶段（**phase**: "appointment"）。
 
+- **holder** (number) 轮到选择的首位玩家座位号
+
+#### ⬆️ 起始玩家指定：接受 "appointment_accept"
 - 无额外参数
+
+只有轮到自己时才有效。完成后，服务端广播一条 **起始玩家指定：接受 "appointment_accept"** 消息。
+
+#### ⬆️ 起始玩家指定：跳过 "appointment_pass"
+- 无额外参数
+
+只有轮到自己时才有效。完成后，服务端广播一条 **起始玩家指定：跳过 "appointment_pass"** 消息。（对于跳过后已轮转满两轮的情况除外，见下。）
+
+#### ⬇️ 起始玩家指定：接受 "appointment_accept"
+表示一位玩家（也可能是自己）接受了自己作为起始玩家的指派，或者在两轮后被随机指派（在逻辑上视同随机玩家“接受”了指定）。房间此时进入「游戏进行中」阶段（**phase**: "gameplay"）。
+
+- **prev_holder** (null | number) 若为玩家自行接受，则为 null；若为两轮后随机指派，则表示最后一位跳过的玩家座位号。
+- **gameplay_status** (object) 同 **房间状态 "room_state"**。其中重要的信息在此复述供参考。
+  - **hand** (string[]) 自己所持有的手牌
+  - **arena** (strings[]) 场上的关键词列表
+  - **holder** (number) 当前轮到的玩家编号（从 0 开始）
+    - 注：此即为接受指定/被随机指定起始的玩家座位号
+  - **timer** (number) 当前环节的剩余时间，以秒计
+
+#### ⬇️ 起始玩家指定：跳过 "appointment_pass"
+表示一位玩家（也可能是自己）跳过自己作为起始玩家的指派。（如果玩家跳过后已轮转满两轮，则不发送此消息，而视为是随机玩家“接受”了指定，见上。）
+
+- **prev_holder** (number) 选择跳过的玩家
+- **next_holder** (number) 接下来轮到选择的玩家。等于 (**prev_holder** + 1) % N，其中 N 为玩家总数
