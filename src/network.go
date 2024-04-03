@@ -277,11 +277,11 @@ func roomCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 		panic("400 Incorrect form format")
 	}
 
-	room := Room{Id: ""}
+	room := Room{Id: 0}
 	if createNew {
 		room.Creator = user.Id
 	} else {
-		room.Id = r.PathValue("room_id")
+		room.Id = parseIntFromPathValue(r, "room_id")
 		if !room.Load() {
 			panic("404 No such room")
 		}
@@ -302,11 +302,8 @@ func roomCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 
 	room.Save()
 
-	if createNew {
-		go GameRoomRun(room)
-		if Config.Debug {
-			log.Printf("Visit http://localhost:%d/test/%s for testing\n", Config.Port, room.Id)
-		}
+	if Config.Debug && createNew {
+		log.Printf("Visit http://localhost:%d/test/%d for testing\n", Config.Port, room.Id)
 	}
 
 	write(w, 200, room.Repr())
@@ -320,7 +317,7 @@ func roomUpdateHandler(w http.ResponseWriter, r *http.Request) {
 
 func roomGetHandler(w http.ResponseWriter, r *http.Request) {
 	room := Room{
-		Id: r.PathValue("room_id"),
+		Id: parseIntFromPathValue(r, "room_id"),
 	}
 	if !room.Load() {
 		panic("404 No such room")
@@ -337,14 +334,21 @@ var upgrader = websocket.Upgrader{
 func roomChannelHandler(w http.ResponseWriter, r *http.Request) {
 	user := auth(w, r)
 
-	room := Room{Id: r.PathValue("room_id")}
+	room := Room{Id: parseIntFromPathValue(r, "room_id")}
 	if !room.Load() {
 		panic("404 No such room")
 	}
 
 	gameRoom := GameRoomFind(room.Id)
 	if gameRoom == nil {
-		panic("404 Room closed")
+		if room.Creator == user.Id {
+			// Reopen room
+			createdSignal := make(chan *GameRoom)
+			go GameRoomRun(room, createdSignal)
+			gameRoom = <-createdSignal
+		} else {
+			panic("404 Room closed")
+		}
 	}
 
 	// Establish the WebSocket connection

@@ -142,7 +142,7 @@ type User struct {
 
 func init() {
 	registerSchema("user",
-		"id INTEGER UNIQUE PRIMARY KEY AUTOINCREMENT",
+		"id INTEGER PRIMARY KEY",
 		"nickname TEXT",
 		"email TEXT",
 		"password TEXT")
@@ -334,11 +334,23 @@ func ProfileListByCreatorRepr(creatorUserId int) []OrderedKeysMarshal {
 }
 
 type Room struct {
-	Id          string
+	Id          int
+	CreatedAt   int64
 	Creator     int
 	Title       string
 	Tags        string
 	Description string
+}
+
+func init() {
+	registerSchema("room",
+		"id INTEGER PRIMARY KEY",
+		"created_at INTEGER",
+		"creator INTEGER",
+		"title TEXT",
+		"tags TEXT",
+		"description TEXT",
+		"FOREIGN KEY (creator) REFERENCES user(id)")
 }
 
 func (r *Room) Repr() OrderedKeysMarshal {
@@ -347,7 +359,7 @@ func (r *Room) Repr() OrderedKeysMarshal {
 		panic("500 Inconsistent databases")
 	}
 	return OrderedKeysMarshal{
-		{"id", r.Id},
+		{"id", strconv.Itoa(r.Id)},
 		{"creator", creator.Repr()},
 		{"title", r.Title},
 		{"tags", strings.Split(r.Tags, ",")},
@@ -356,41 +368,33 @@ func (r *Room) Repr() OrderedKeysMarshal {
 }
 
 func (r *Room) Load() bool {
-	exists, err := rcli.Exists(context.Background(), "room:"+r.Id).Result()
+	err := db.QueryRow(
+		`SELECT created_at, creator, title, tags, description FROM room WHERE id = $1`,
+		r.Id,
+	).Scan(&r.CreatedAt, &r.Creator, &r.Title, &r.Tags, &r.Description)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false
+		}
 		panic(err)
 	}
-	if exists == 0 {
-		return false
-	}
-	val, err := rcli.HGetAll(context.Background(), "room:"+r.Id).Result()
-	if err != nil {
-		panic(err)
-	}
-	r.Title = val["title"]
-	creatorUserId, err := strconv.Atoi(val["creator"])
-	if err != nil {
-		panic(err)
-	}
-	r.Creator = creatorUserId
-	r.Tags = val["tags"]
-	r.Description = val["description"]
 	return true
 }
 
-func (r *Room) Save() {
-	if r.Id == "" {
-		val, err := rcli.Incr(context.Background(), "room_count").Result()
-		if err != nil {
-			panic(err)
-		}
-		r.Id = fmt.Sprintf("%d", val)
+func (r *Room) CreateHandle() string {
+	val, err := rcli.Incr(context.Background(), "room_count").Result()
+	if err != nil {
+		panic(err)
 	}
-	_, err := rcli.HSet(context.Background(), "room:"+r.Id,
-		"title", r.Title,
-		"creator", r.Creator,
-		"tags", r.Tags,
-		"description", r.Description).Result()
+	return strconv.FormatInt(val, 10)
+}
+
+func (r *Room) Save() {
+	err := db.QueryRow(
+		`INSERT OR REPLACE INTO room (id, created_at, creator, title, tags, description) `+
+			`VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+		nullIfZero(r.Id), r.CreatedAt, r.Creator, r.Title, r.Tags, r.Description,
+	).Scan(&r.Id)
 	if err != nil {
 		panic(err)
 	}

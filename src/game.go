@@ -126,9 +126,9 @@ type GameRoom struct {
 }
 
 var GameRoomDataMutex = &sync.Mutex{}
-var GameRoomMap = make(map[string]*GameRoom)
+var GameRoomMap = make(map[int]*GameRoom)
 
-func GameRoomFind(roomId string) *GameRoom {
+func GameRoomFind(roomId int) *GameRoom {
 	return GameRoomMap[roomId]
 }
 
@@ -181,7 +181,7 @@ func (r *GameRoom) BroadcastAssemblyUpdate() {
 }
 
 // Should be run in a goroutine
-func GameRoomRun(room Room) {
+func GameRoomRun(room Room, createdSignal chan *GameRoom) {
 	GameRoomDataMutex.Lock()
 	if _, ok := GameRoomMap[room.Id]; ok {
 		GameRoomDataMutex.Unlock()
@@ -208,6 +208,8 @@ func GameRoomRun(room Room) {
 
 	hahaTicker := time.NewTicker(10 * time.Second)
 	defer hahaTicker.Stop()
+
+	createdSignal <- r
 
 loop:
 	for {
@@ -262,7 +264,9 @@ loop:
 
 		case sig := <-r.Signal:
 			if sigNewConn, ok := sig.(GameRoomSignalNewConn); ok {
-				timeoutTicker.Stop()
+				if sigNewConn.UserId == room.Creator {
+					timeoutTicker.Stop()
+				}
 				r.Mutex.RLock()
 				conn := r.Conns[sigNewConn.UserId]
 				message := r.StateMessage(sigNewConn.UserId)
@@ -271,10 +275,10 @@ loop:
 			}
 			if sigNewConn, ok := sig.(GameRoomSignalLostConn); ok {
 				println("connection lost ", sigNewConn.UserId)
-				r.Mutex.RLock()
-				n := len(r.Conns)
-				r.Mutex.RUnlock()
-				if n == 0 {
+				// r.Mutex.RLock()
+				// n := len(r.Conns)
+				// r.Mutex.RUnlock()
+				if sigNewConn.UserId == room.Creator {
 					timeoutTicker.Reset(timeoutDur)
 				}
 			}
