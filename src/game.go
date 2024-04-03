@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -125,7 +126,7 @@ type GameRoom struct {
 	Mutex     *sync.RWMutex
 }
 
-var GameRoomDataMutex = &sync.Mutex{}
+var GameRoomMapMutex = &sync.Mutex{}
 var GameRoomMap = make(map[int]*GameRoom)
 
 func GameRoomFind(roomId int) *GameRoom {
@@ -180,11 +181,68 @@ func (r *GameRoom) BroadcastAssemblyUpdate() {
 	r.Mutex.RUnlock()
 }
 
+func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
+	var conn WebSocketConn
+
+	defer func() {
+		if obj := recover(); obj != nil {
+			var errorMsg string
+			if err, ok := obj.(error); ok {
+				errorMsg = err.Error()
+			} else if str, ok := obj.(string); ok {
+				errorMsg = str
+			} else {
+				errorMsg = fmt.Sprint("%v", obj)
+			}
+			conn.OutChannel <- OrderedKeysMarshal{{"error", errorMsg}}
+		}
+	}()
+
+	message := msg.Message
+
+	r.Mutex.Lock()
+	unlock := sync.OnceFunc(r.Mutex.Unlock)
+	defer unlock()
+
+	conn = r.Conns[msg.UserId]
+	if message["type"] == "seat" {
+		user := conn.User
+		profileId, ok := message["profile_id"].(float64)
+		if !ok {
+			panic("Incorrect `profile_id`")
+		}
+		profile := Profile{Id: int(profileId)}
+		if !profile.Load() {
+			panic("No such profile")
+		}
+		if profile.Creator != user.Id {
+			panic("Not creator")
+		}
+		if err := r.Gameplay.Seat(user, profile); err != "" {
+			panic(err)
+		}
+		unlock()
+		r.BroadcastAssemblyUpdate()
+	} else if message["type"] == "withdraw" {
+		if err := r.Gameplay.WithdrawSeat(msg.UserId); err != "" {
+			panic(err)
+		}
+		unlock()
+		r.BroadcastAssemblyUpdate()
+	} else if message["type"] == "start" {
+		if msg.UserId != r.Room.Creator {
+			panic("Not room creator")
+		}
+	} else {
+		panic("Unknown type")
+	}
+}
+
 // Should be run in a goroutine
 func GameRoomRun(room Room, createdSignal chan *GameRoom) {
-	GameRoomDataMutex.Lock()
+	GameRoomMapMutex.Lock()
 	if _, ok := GameRoomMap[room.Id]; ok {
-		GameRoomDataMutex.Unlock()
+		GameRoomMapMutex.Unlock()
 		return
 	}
 	r := &GameRoom{
@@ -200,7 +258,7 @@ func GameRoomRun(room Room, createdSignal chan *GameRoom) {
 		Mutex: &sync.RWMutex{},
 	}
 	GameRoomMap[room.Id] = r
-	GameRoomDataMutex.Unlock()
+	GameRoomMapMutex.Unlock()
 
 	timeoutDur := 180 * time.Second
 	timeoutTicker := time.NewTicker(timeoutDur)
@@ -213,54 +271,9 @@ func GameRoomRun(room Room, createdSignal chan *GameRoom) {
 
 loop:
 	for {
-	selection:
 		select {
 		case msg := <-r.InChannel:
-			message := msg.Message
-			if message["type"] == "seat" {
-				r.Mutex.Lock()
-				conn := r.Conns[msg.UserId]
-				user := conn.User
-				profileId, ok := message["profile_id"].(float64)
-				if !ok {
-					r.Mutex.Unlock()
-					conn.OutChannel <- OrderedKeysMarshal{{"error", "Incorrect `profile_id`"}}
-					break selection
-				}
-				profile := Profile{Id: int(profileId)}
-				if !profile.Load() {
-					r.Mutex.Unlock()
-					conn.OutChannel <- OrderedKeysMarshal{{"error", "No such profile"}}
-					break selection
-				}
-				if profile.Creator != user.Id {
-					r.Mutex.Unlock()
-					conn.OutChannel <- OrderedKeysMarshal{{"error", "Not creator"}}
-					break selection
-				}
-				if err := r.Gameplay.Seat(user, profile); err != "" {
-					r.Mutex.Unlock()
-					conn.OutChannel <- OrderedKeysMarshal{{"error", err}}
-					break selection
-				}
-				r.Mutex.Unlock()
-				r.BroadcastAssemblyUpdate()
-			} else if message["type"] == "withdraw" {
-				r.Mutex.Lock()
-				conn := r.Conns[msg.UserId]
-				if err := r.Gameplay.WithdrawSeat(msg.UserId); err != "" {
-					r.Mutex.Unlock()
-					conn.OutChannel <- OrderedKeysMarshal{{"error", err}}
-					break selection
-				}
-				r.Mutex.Unlock()
-				r.BroadcastAssemblyUpdate()
-			} else {
-				r.Mutex.RLock()
-				conn := r.Conns[msg.UserId]
-				r.Mutex.RUnlock()
-				conn.OutChannel <- OrderedKeysMarshal{{"error", "Unknown type"}}
-			}
+			r.ProcessMessage(msg)
 
 		case sig := <-r.Signal:
 			if sigNewConn, ok := sig.(GameRoomSignalNewConn); ok {
@@ -274,7 +287,7 @@ loop:
 				conn.OutChannel <- message
 			}
 			if sigNewConn, ok := sig.(GameRoomSignalLostConn); ok {
-				println("connection lost ", sigNewConn.UserId)
+				println("connection lost", sigNewConn.UserId)
 				// r.Mutex.RLock()
 				// n := len(r.Conns)
 				// r.Mutex.RUnlock()
@@ -298,9 +311,9 @@ loop:
 
 		case <-timeoutTicker.C:
 			r.Closed = true
-			GameRoomDataMutex.Lock()
+			GameRoomMapMutex.Lock()
 			delete(GameRoomMap, room.Id)
-			GameRoomDataMutex.Unlock()
+			GameRoomMapMutex.Unlock()
 			break loop
 		}
 	}
