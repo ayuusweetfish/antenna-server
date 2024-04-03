@@ -45,8 +45,10 @@ window.addEventListener('load', function(evt) {
       return null
     }
   }
-  document.getElementById('open').onclick = (evt) => {
+  document.getElementById('open_close').onclick = (evt) => {
     if (ws) {
+      ws.close()
+      document.getElementById('open_close').innerText = 'Open'
       return false
     }
     document.cookie = 'auth=!' + user.value + '; SameSite=Strict; Path=/; Secure; Max-Age=604800'
@@ -58,7 +60,7 @@ window.addEventListener('load', function(evt) {
     ws.onopen = (evt) => {
       unprint()
       print('OPEN', '#4b6', true)
-      input.value = JSON.stringify({"type": "seat", "profile_id": 14}, undefined, 2)
+      input.value = JSON.stringify({"type": "seat", "profile_id": ~ profile ~}, undefined, 2)
     }
     ws.onclose = (evt) => {
       print('CLOSE', '#888', true)
@@ -76,6 +78,7 @@ window.addEventListener('load', function(evt) {
       print('ERROR: see console', '#f64', true)
       console.log(evt)
     }
+    document.getElementById('open_close').innerText = 'Close'
     return false
   }
   document.getElementById('send').onclick = (evt) => {
@@ -88,13 +91,9 @@ window.addEventListener('load', function(evt) {
     )
     ws.send(input.value)
     const obj = tryparse(input.value)
-    return false
-  }
-  document.getElementById('close').onclick = function(evt) {
-    if (!ws) {
-      return false
+    if (obj.type === 'seat') {
+      input.value = JSON.stringify({'type': 'start'}, undefined, 2)
     }
-    ws.close()
     return false
   }
 })
@@ -110,8 +109,7 @@ window.addEventListener('load', function(evt) {
 玩家
 <input id='user' type='text' value='~ id ~'>
 </p><p>
-<button id='open'>Open</button>
-<button id='close'>Close</button>
+<button id='open_close'>Open</button>
 </p><p>
 <textarea id='input' rows='7'>
 </textarea>

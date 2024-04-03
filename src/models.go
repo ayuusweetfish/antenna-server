@@ -334,6 +334,18 @@ func ProfileListByCreatorRepr(creatorUserId int) []OrderedKeysMarshal {
 	return profiles
 }
 
+func ProfileAnyByCreator(userId int) int {
+	var profileId int
+	err := db.QueryRow("SELECT id FROM profile WHERE creator = $1 LIMIT 1", userId).Scan(&profileId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0
+		}
+		panic(err)
+	}
+	return profileId
+}
+
 type Room struct {
 	Id          int
 	Creator     int

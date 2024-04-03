@@ -452,6 +452,9 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	s := string(content)
 	s = strings.Replace(s, "~ room ~", r.PathValue("room_id"), 1)
 	s = strings.Replace(s, "~ id ~", r.PathValue("player_id"), 1)
+	userId, _ := strconv.Atoi(r.PathValue("player_id"))
+	s = strings.Replace(s, "~ profile ~",
+		strconv.Itoa(ProfileAnyByCreator(userId)), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(s))
 }

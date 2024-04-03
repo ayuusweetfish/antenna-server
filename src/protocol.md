@@ -151,7 +151,9 @@
   - **act_count** (number) 当前幕数（从 1 开始）
   - **turn_count** (number) 当前轮数（从 1 开始）
   - **move_count** (number) 当前回合数（从 1 开始）
-  - **relationship** (number[N, 3]) 自己与其他玩家之间的关系评价
+  - **relationship** (number[N, 3]) 自己与其他玩家之间的关系评价（按“激情”、“亲密”、“责任”的顺序；对应自己的一行均为 0）
+  - **action_points** (number) 自己剩余的行动点数
+    - 基础版 demo 阶段，为 1 表示本轮尚未发言，为 0 表示本轮已经发言、不能再举手。
   - **hand** (string[]) 自己所持有的手牌
   - **arena** (strings[]) 场上的关键词列表
   - **holder** (number) 当前轮到的玩家编号（从 0 开始）
@@ -159,8 +161,8 @@
     - "selection" —— 正在选择手牌；此时下述 **action**、**keyword** 与 **target** 三项均为 null
     - "storytelling_holder" —— 发起方正在讲述
     - "storytelling_target" —— 被动方正在讲述
-  - **action** (null | number) 当前选择的行动牌
-  - **keyword** (null | number) 当前选择的关键词
+  - **action** (null | string) 当前行动的行动牌名称
+  - **keyword** (null | number) 当前行动的关键词编号（**arena** 中的下标，从 0 开始）
   - **target** (null | number) 行动的被动方玩家编号（从 0 开始）
   - **timer** (number) 当前环节的剩余时间，以秒计
   - **queue** (number[]) 当前举手排队的玩家列表，靠前的玩家最先轮到
