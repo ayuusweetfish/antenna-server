@@ -89,6 +89,46 @@ func (t *PeekableTimer) Stop() {
 	}
 }
 
+////// Card set settings //////
+
+type Card struct {
+	Condition          []int
+	Growth             int
+	RelationshipChange [3]int
+}
+
+var CardSet map[string]Card = func() map[string]Card {
+	const (
+		Se = iota
+		Si
+		Ne
+		Ni
+		Te
+		Ti
+		Fe
+		Fi
+	)
+	return map[string]Card{
+		"LX": {[]int{Ne, Fi, Se}, 1, [3]int{1, 6, 1}},
+		"GL": {[]int{Fe, Fi, Si}, 1, [3]int{2, 6, 3}},
+		"DJ": {[]int{Te, Si, Fi}, 1, [3]int{-5, -9, 2}},
+		"DR": {[]int{Se, Ne, Ni, Fi, Te}, 2, [3]int{8, 5, 3}},
+		"QP": {[]int{Se, Fe, Ni, Te}, 2, [3]int{-9, -9, -9}},
+		"HX": {[]int{Ne, Fi, Si}, 1, [3]int{9, 7, 0}},
+		"LI": {[]int{Ne}, 1, [3]int{0, 1, 0}},
+		"HY": {[]int{Si}, 1, [3]int{0, 5, 1}},
+	}
+}()
+var CardSetNames []string = func() []string {
+	names := []string{}
+	for key := range CardSet {
+		names = append(names, key)
+	}
+	return names
+}()
+
+var KeywordSetNames []string = []string{"kwA", "kwB", "kwC", "kwD", "kwE", "kwF", "kwG"}
+
 ////// Gameplay //////
 
 type GameplayPhaseStatusAssembly struct {
@@ -131,24 +171,37 @@ func max[T interface{ int | uint64 | float64 }](x, y T) T {
 		return y
 	}
 }
+func fillRandomElements(elements []string, n int, pool []string) []string {
+	if elements == nil {
+		elements = []string{}
+	}
+	set := map[string]struct{}{}
+	for _, w := range elements {
+		set[w] = struct{}{}
+	}
+	for len(elements) < n {
+		w := pool[CloudRandom(len(pool))]
+		if _, ok := set[w]; !ok {
+			elements = append(elements, w)
+			set[w] = struct{}{}
+		}
+	}
+	return elements
+}
 func fillArena(arena []string, n int) []string {
-	if arena == nil {
-		arena = []string{}
-	}
-	for len(arena) < n {
-		arena = append(arena, fmt.Sprintf("kw%2d", CloudRandom(100)))
-	}
-	return arena
+	return fillRandomElements(arena, n, KeywordSetNames)
+}
+func fillCards(cards []string, n int) []string {
+	return fillRandomElements(cards, n, CardSetNames)
 }
 
 func GameplayPhaseStatusGameplayNew(n int, holder int, f func()) GameplayPhaseStatusGameplay {
 	players := []GameplayPhaseStatusGameplayPlayer{}
-	for i := range n {
-		s := fmt.Sprintf("%d", i)
+	for _ = range n {
 		players = append(players, GameplayPhaseStatusGameplayPlayer{
 			Relationship: make([][3]int, n),
 			ActionPoints: 1,
-			Hand:         []string{"card" + s + "1", "card" + s + "2", "card" + s + "3"},
+			Hand:         fillCards(nil, 5),
 		})
 	}
 
@@ -459,10 +512,7 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
 			st.Arena[st.Keyword+1:]...,
 		)
 		// Replenish hand
-		st.Player[st.Holder].Hand = append(
-			st.Player[st.Holder].Hand,
-			fmt.Sprintf("card%02d", CloudRandom(100)),
-		)
+		st.Player[st.Holder].Hand = fillCards(st.Player[st.Holder].Hand, 5)
 		// Next player
 		if len(st.Queue) > 0 {
 			st.Holder = st.Queue[0]
