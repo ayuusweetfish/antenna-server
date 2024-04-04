@@ -117,6 +117,12 @@ var CardSet map[string]Card = func() map[string]Card {
 		"HX": {[]int{Ne, Fi, Si}, 1, [3]int{9, 7, 0}},
 		"LI": {[]int{Ne}, 1, [3]int{0, 1, 0}},
 		"HY": {[]int{Si}, 1, [3]int{0, 5, 1}},
+		"WJ": {[]int{Ni, Te, Ti, Ne, Se}, 2, [3]int{3, 3, 3}},
+		"PH": {[]int{Se, Te, Ni, Si, Fi}, 1, [3]int{6, 2, 0}},
+		"JG": {[]int{Ti, Ne, Te, Si}, 3, [3]int{0, 0, 0}},
+		"JD": {[]int{Te, Ne, Ti, Si}, 2, [3]int{5, 2, 9}},
+		"GR": {[]int{Fe, Te, Se, Fi}, 1, [3]int{5, 2, 0}},
+		"TL": {[]int{Fi, Ti, Ne, Te}, 2, [3]int{1, -9, -6}},
 	}
 }()
 var CardSetNames []string = func() []string {
@@ -133,7 +139,7 @@ var KeywordSetNames []string = []string{"kwA", "kwB", "kwC", "kwD", "kwE", "kwF"
 
 const TimeLimitAppointment = 30 * time.Second
 const TimeLimitCardSelection = 60 * time.Second
-func TimeLimitStorytelling = 180 * time.Second
+const TimeLimitStorytelling = 180 * time.Second
 
 type GameplayPhaseStatusAssembly struct {
 }
@@ -456,18 +462,47 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	st.Keyword = arenaIndex
 	st.Target = target
 	st.HolderDifficulty = CloudRandom(100)
-	// TODO
-	if st.HolderDifficulty < 50 {
-		st.HolderResult = 1
-		if st.HolderDifficulty <= 5 {
-			st.HolderResult = 2
+
+	// Check
+	card := CardSet[st.Action]
+	checkResult := func(difficulty int, stats [8]int) int {
+		if difficulty <= 5 {
+			return 2
+		} else if difficulty >= 90 {
+			return -2
 		}
-	} else {
-		st.HolderResult = -1
-		if st.HolderDifficulty >= 90 {
-			st.HolderResult = -2
+		// Compare card requirements to stats
+		count := 0
+		for _, statIndex := range card.Condition {
+			if stats[statIndex] >= difficulty {
+				count++
+			}
+		}
+		if count*2 >= len(card.Condition) {
+			return 1
+		} else {
+			return -1
 		}
 	}
+
+	st.HolderResult = checkResult(st.HolderDifficulty, s.Players[playerIndex].Profile.Stats)
+
+	if target != -1 {
+		difficulty := CloudRandom(100)
+		st.TargetDifficulty = difficulty
+		switch st.HolderResult {
+		case 2:
+			difficulty -= 20
+		case 1:
+			difficulty -= 10
+		case -1:
+			difficulty += 10
+		case -2:
+			difficulty += 20
+		}
+		st.HolderResult = checkResult(difficulty, s.Players[playerIndex].Profile.Stats)
+	}
+
 	st.Timer.Reset(TimeLimitStorytelling)
 
 	// Remove card from hand
