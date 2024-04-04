@@ -148,6 +148,13 @@
   - **holder** (number) 当前轮到的玩家座位号
   - **timer** (number) 当前轮到玩家的剩余时间，以秒计
 - **gameplay_status** (undefined | object) 游戏状态（「游戏进行中」阶段 —— **phase**: "gameplay"）
+  - **event** (string) 本条状态消息对应的事件
+    - "none" —— 无事件，断线重连时发送
+    - "appointment_accept" —— 玩家接受成为起始玩家，游戏开始
+    - "action_check" —— 轮到的玩家出牌并进行判定
+    - "storytelling_end_next_storyteller" —— 轮到的玩家结束讲述，轮到下一位（被动方）讲述
+    - "storytelling_end_new_move" —— 轮到的玩家结束讲述，开始新的回合
+    - "queue" —— 有玩家加入排队
   - **act_count** (number) 当前幕数（从 1 开始）
   - **round_count** (number) 当前轮数（从 1 开始）
   - **move_count** (number) 当前回合数（从 1 开始）
@@ -158,12 +165,21 @@
   - **arena** (strings[]) 场上的关键词列表
   - **holder** (number) 当前轮到的玩家座位号
   - **step** (string) 当前环节
-    - "selection" —— 正在选择手牌；此时下述 **action**、**keyword** 与 **target** 三项均为 null
+    - "selection" —— 正在选择手牌
     - "storytelling_holder" —— 主动方正在讲述
     - "storytelling_target" —— 被动方正在讲述
-  - **action** (null | string) 当前行动的行动牌名称
-  - **keyword** (null | number) 当前行动的关键词编号（**arena** 中的下标，从 0 开始）
-  - **target** (null | number) 行动的被动方玩家座位号
+  - 以下带🔸的条目表示本回合进行的行动，以及判定结果。若处于「选择手牌」阶段，这些条目均为空。
+  - 🔸 **action** (null | string) 当前行动的行动牌名称
+  - 🔸 **keyword** (null | number) 当前行动的关键词编号（**arena** 中的下标，从 0 开始）
+  - 🔸 **target** (null | number) 行动的被动方玩家座位号
+  - 🔸 **holder_difficulty** (null | number) 主动方投掷出的行动难度
+  - 🔸 **holder_result** (null | number) 主动方判定结果
+    - 2：大成功
+    - 1：成功
+    - -1：失败
+    - -2：大失败
+  - 🔸 **target_difficulty** (null | number) 被动方投掷出的行动难度。若无被动方，则为空。
+  - 🔸 **target_result** (null | number) 被动方判定结果。若无被动方，则为空。
   - **timer** (number) 当前环节的剩余时间，以秒计，精确到小数点后一位
   - **queue** (number[]) 当前举手排队的玩家列表，靠前的玩家最先轮到
 
@@ -216,6 +232,7 @@
 
 - **prev_holder** (null | number) 若为玩家自行接受，则为 null；若为两轮后随机指派，则表示最后一位跳过的玩家座位号。
 - **gameplay_status** (object) 同 **房间状态 "room_state"**。其中重要的信息在此复述供参考。
+  - **event** (string) 等于 "appointment_accept"
   - **hand** (string[]) 自己所持有的手牌
   - **arena** (strings[]) 场上的关键词列表
   - **holder** (number) 当前轮到的座位号
@@ -233,53 +250,17 @@
 - **arena_index** (number) 场上关键词的编号（**arena** 中的下标，从 0 开始）
 - **target** (number | null | undefined) 被动方玩家的座位号。若无被动方，则为 -1、null 或省略三种形式之一
 
-只有轮到自己时才有效。完成后，服务端广播一条 **行动结果判定 "action_check"** 消息。
-
-#### 🔻 行动结果判定 "action_check"
-表示一位玩家（也可能是自己）确认打出了一张行动牌。系统对此给出判定结果。此时进入「主动方讲述」（"storytelling_holder"）环节。
-
-- **holder_difficulty** (number) 主动方投掷出的行动难度
-- **holder_result** (number) 主动方判定结果
-  - 2：大成功
-  - 1：成功
-  - -1：失败
-  - -2：大失败
-- **holder_relationship** (number[3] | null) 结算后，主动方对被动方的关系评价。该项只在“主动方是自己，且有被动方”时非空。
-- **target_difficulty** (number | null) 被动方投掷出的行动难度。若无被动方，则为空。
-- **target_result** (number | null) 被动方判定结果。若无被动方，则为空。
-- **target_relationship** (number[3] | null) 被动方对主动方的关系评价。若无被动方，则为空。
-- **timer** (number) 主动方讲述环节的时限，以秒计，精确到小数点后一位
+只有轮到自己时才有效。完成后，服务端广播一条 **房间状态 "room_state"** 消息，其中 **gameplay_status.event** 值为 "action_check"。
 
 #### 🔺 讲述完成 "storytelling_end"
 - 无额外参数
 
-只有轮到自己讲述时有效。若超时，讲述环节会自动结束，不必再发送此消息。
-
-#### 🔻 讲述完成 "storytelling_end"
-表示讲述的玩家选择结束，或超时自动结束。
-
-- **storyteller** (number) 完成讲述的玩家座位号
-- **is_active** (boolean) 完成讲述的玩家是否是主动方
-- **is_timeout** (boolean) 完成讲述是否是因为超时
-- **next_storyteller** (number | null) 下一位轮到讲述的玩家座位号（若非空，则必为被动方；空的情况包括无被动方，或者方才完成讲述的是被动方）
-- **timer** (number | null) 下一位讲述环节的时限，以秒计，精确到小数点后一位
-- **gameplay_status** (object | null) 当 **next_storyteller** 为 null 时非空，这时游戏进入下一回合。含义同 **房间状态 "room_state"**。
-- **is_finish** (boolean) 是否游戏结束
-
-环节变更规则，供参考：
-- 若 **is_finish** 为 true，则进入最终结算环节（🚧）；
-- 若 **next_storyteller** 为 null，则进入下一回合的「选择手牌」（"selection"）环节（这一情形下 **gameplay_status.step** 也会反映）；
-- 否则进入本回合的「被动方讲述」（"storytelling_target"）环节。
+只有轮到自己讲述时有效。若超时，讲述环节会自动结束，不必再发送此消息。完成后，服务端广播一条 **房间状态 "room_state"** 消息，其中 **gameplay_status.event** 值为 "storytelling_end"。
 
 #### 🔺 举手 "queue"
 - 无额外参数
 
-其他玩家讲述期间可以举手排队。完成后，服务端广播一条 **举手列表变更 "queue_update"** 消息。
-
-#### 🔻 举手列表变更 "queue_update"
-表示一位玩家（也可能是自己）举手排队。
-
-- **queue** (number[]) 当前举手排队的玩家列表，靠前的玩家最先轮到
+其他玩家讲述期间可以举手排队。完成后，服务端广播一条 **房间状态 "room_state"** 消息，其中 **gameplay_status.event** 值为 "queue"。
 
 #### 🔺 评论 "comment"
 - **text** (string) 发送的文字评论
