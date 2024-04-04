@@ -140,6 +140,7 @@ var KeywordSetNames []string = []string{"kwA", "kwB", "kwC", "kwD", "kwE", "kwF"
 const TimeLimitAppointment = 30 * time.Second
 const TimeLimitCardSelection = 60 * time.Second
 const TimeLimitStorytelling = 180 * time.Second
+const TimeLimitStorytellingCont = 120 * time.Second
 
 type GameplayPhaseStatusAssembly struct {
 }
@@ -149,7 +150,7 @@ type GameplayPhaseStatusAppointment struct {
 	Timer  PeekableTimer
 }
 type GameplayPhaseStatusGameplayPlayer struct {
-	Relationship [][3]int
+	Relationship [][3]float32
 	ActionPoints int
 	Hand         []string
 }
@@ -209,7 +210,7 @@ func GameplayPhaseStatusGameplayNew(n int, holder int, f func()) GameplayPhaseSt
 	players := []GameplayPhaseStatusGameplayPlayer{}
 	for _ = range n {
 		players = append(players, GameplayPhaseStatusGameplayPlayer{
-			Relationship: make([][3]int, n),
+			Relationship: make([][3]float32, n),
 			ActionPoints: 1,
 			Hand:         fillCards(nil, 5),
 		})
@@ -484,8 +485,28 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 			return -1
 		}
 	}
+	applyRelationshipChanges := func(result int, relationship *[3]float32) {
+		var multiplier float32
+		switch result {
+		case 2:
+			multiplier = 1.5
+		case 1:
+			multiplier = 1.0
+		case -1:
+			multiplier = -1.0
+		case -2:
+			multiplier = -1.5
+		}
+		for i := range 3 {
+			relationship[i] += float32(card.RelationshipChange[i]) * multiplier
+		}
+	}
 
 	st.HolderResult = checkResult(st.HolderDifficulty, s.Players[playerIndex].Profile.Stats)
+	// XXX: Do relationship values change when acting without a target?
+	if target != -1 {
+		applyRelationshipChanges(st.HolderResult, &st.Player[playerIndex].Relationship[target])
+	}
 
 	if target != -1 {
 		difficulty := CloudRandom(100)
@@ -500,7 +521,8 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 		case -2:
 			difficulty += 20
 		}
-		st.HolderResult = checkResult(difficulty, s.Players[playerIndex].Profile.Stats)
+		st.TargetResult = checkResult(difficulty, s.Players[target].Profile.Stats)
+		applyRelationshipChanges(st.TargetResult, &st.Player[target].Relationship[playerIndex])
 	}
 
 	st.Timer.Reset(TimeLimitStorytelling)
@@ -545,7 +567,7 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
 	if nextStoryteller != -1 {
 		st.Step = "storytelling_target"
 		isNewMove = false
-		st.Timer.Reset(120 * time.Second)
+		st.Timer.Reset(TimeLimitStorytellingCont)
 	} else {
 		st.Step = "selection"
 		isNewMove = true
