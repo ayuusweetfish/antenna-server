@@ -291,7 +291,6 @@ func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
 	entries := OrderedKeysMarshal{
 		{"type", "room_state"},
 		{"room", r.Room.Repr()},
-		{"players", r.Gameplay.PlayerReprs()},
 		{"my_index", r.Gameplay.PlayerIndexNullable(userId)},
 	}
 	entries = append(entries, r.Gameplay.Repr(userId)...)
