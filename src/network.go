@@ -303,8 +303,11 @@ func roomCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 
 	room.Save()
 
-	if Config.Debug && createNew {
-		log.Printf("Visit http://localhost:%d/test/%d/%d for testing\n", Config.Port, room.Id, user.Id)
+	if createNew {
+		go GameRoomRun(room, nil)
+		if Config.Debug {
+			log.Printf("Visit http://localhost:%d/test/%d/%d for testing\n", Config.Port, room.Id, user.Id)
+		}
 	}
 
 	write(w, 200, room.Repr())

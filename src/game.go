@@ -478,7 +478,9 @@ func GameRoomRun(room Room, createdSignal chan *GameRoom) {
 	hahaTicker := time.NewTicker(10 * time.Second)
 	defer hahaTicker.Stop()
 
-	createdSignal <- r
+	if createdSignal != nil {
+		createdSignal <- r
+	}
 
 loop:
 	for {
