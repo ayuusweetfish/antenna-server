@@ -251,12 +251,12 @@
 - **arena_index** (number) 场上关键词的编号（**arena** 中的下标，从 0 开始）
 - **target** (number | null | undefined) 被动方玩家的座位号。若无被动方，则可取以下任意值：① 自己的座位号、② -1、③ null、④ undefined（直接省略）
 
-只有轮到自己时才有效。完成后，服务端广播一条 **游戏进程 "gameplay_progress"** 消息，其中 **gameplay_status.event** 值为 "action_check"。
+只有轮到自己时才有效。完成后，服务端广播一条 **游戏进程 "gameplay_progress"** 消息，其中 **gameplay_status.event** 值为 "action_check"，所选手牌从手牌列表中移除，玩家行动点数被扣除。
 
 #### 🔺 讲述完成 "storytelling_end"
 - 无额外参数
 
-只有轮到自己讲述时有效。若超时，讲述环节会自动结束，不必再发送此消息。完成后，服务端广播一条 **游戏进程 "gameplay_progress"** 消息，其中 **gameplay_status.event** 值为 "storytelling_end_next_storyteller" 或 "storytelling_end_new_move"。
+只有轮到自己讲述时有效。若超时，讲述环节会自动结束，不必再发送此消息。完成后，服务端广播一条 **游戏进程 "gameplay_progress"** 消息，其中 **gameplay_status.event** 值为 "storytelling_end_next_storyteller" 或 "storytelling_end_new_move"。若为后者，则补充一张手牌。
 
 #### 🔺 举手 "queue"
 - 无额外参数

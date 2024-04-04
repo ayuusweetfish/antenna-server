@@ -413,6 +413,9 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 		st.Player[playerIndex].Hand[:handIndex],
 		st.Player[playerIndex].Hand[handIndex+1:]...,
 	)
+	// Deduct action points
+	st.Player[playerIndex].ActionPoints -= 1
+
 	s.PhaseStatus = st
 
 	return ""
@@ -450,7 +453,6 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
 		st.Step = "selection"
 		isNewMove = true
 		st.MoveCount += 1
-		st.Holder = (st.Holder + 1) % len(s.Players)
 		// Remove keyword from arena
 		st.Arena = append(
 			st.Arena[:st.Keyword],
@@ -461,18 +463,64 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
 			st.Player[st.Holder].Hand,
 			fmt.Sprintf("card%02d", CloudRandom(100)),
 		)
-		if st.MoveCount > len(s.Players) {
-			// New round!
-			st.RoundCount += 1
-			st.MoveCount = 1
-			// Replenish arena
-			st.Arena = fillArena(st.Arena, max(len(s.Players), 3))
+		// Next player
+		if len(st.Queue) > 0 {
+			st.Holder = st.Queue[0]
+			st.Queue = st.Queue[1:]
+		} else {
+			// Randomly pick a player with non-zero action point(s)
+			nonZero := []int{}
+			for i, p := range st.Player {
+				if p.ActionPoints > 0 {
+					nonZero = append(nonZero, i)
+				}
+			}
+			if len(nonZero) > 0 {
+				st.Holder = nonZero[CloudRandom(len(nonZero))]
+			} else {
+				// New round!
+				st.RoundCount += 1
+				st.MoveCount = 1
+				// Replenish arena
+				st.Arena = fillArena(st.Arena, max(len(s.Players), 3))
+				// Replenish action points
+				for i, _ := range st.Player {
+					st.Player[i].ActionPoints = 1
+				}
+				// Random player
+				st.Holder = CloudRandom(len(s.Players))
+			}
 		}
 		st.Timer.Reset(30 * time.Second)
 	}
 
 	s.PhaseStatus = st
 	return isNewMove, ""
+}
+
+func (s *GameplayState) Queue(userId int) string {
+	st, ok := s.PhaseStatus.(GameplayPhaseStatusGameplay)
+	if !ok {
+		return "Not in gameplay phase"
+	}
+
+	playerIndex := s.PlayerIndex(userId)
+	if playerIndex == -1 {
+		return "Not in game"
+	}
+	if st.Player[playerIndex].ActionPoints == 0 {
+		return "No action points remaining"
+	}
+	for i, p := range st.Queue {
+		if p == playerIndex {
+			return fmt.Sprintf("Already in queue (position %d)", i)
+		}
+	}
+
+	st.Queue = append(st.Queue, playerIndex)
+	s.PhaseStatus = st
+
+	return ""
 }
 
 ////// Room //////
@@ -715,6 +763,12 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		}
 		r.BroadcastGameProgress(event)
 	} else if message["type"] == "queue" {
+		err := r.Gameplay.Queue(msg.UserId)
+		if err != "" {
+			panic(err)
+		}
+		unlock()
+		r.BroadcastGameProgress("queue")
 	} else if message["type"] == "comment" {
 	} else {
 		panic("Unknown type")
