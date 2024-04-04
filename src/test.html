@@ -81,7 +81,7 @@ window.addEventListener('load', function(evt) {
         input.value = stringify({'type': 'appointment_accept'})
       } else if ((obj.type === 'appointment_accept' || obj.type === 'gameplay_progress' || obj.type === 'room_state')
           && obj.gameplay_status.step === 'selection' && obj.gameplay_status.holder === myIndex) {
-        input.value = stringify({'type': 'action', 'hand_index': 2, 'arena_index': 1, 'target': null})
+        input.value = stringify({'type': 'action', 'hand_index': 0, 'arena_index': 1, 'target': null})
       } else if ((obj.type === 'gameplay_progress' || obj.type === 'room_state')
           && obj.gameplay_status.step.startsWith('storytelling_')) {
         input.value = stringify({'type': 'storytelling_end'})

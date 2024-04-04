@@ -124,6 +124,23 @@ type GameplayPhaseStatusGameplay struct {
 	TargetResult     int
 }
 
+func max[T interface{ int | uint64 | float64 }](x, y T) T {
+	if x > y {
+		return x
+	} else {
+		return y
+	}
+}
+func fillArena(arena []string, n int) []string {
+	if arena == nil {
+		arena = []string{}
+	}
+	for len(arena) < n {
+		arena = append(arena, fmt.Sprintf("kw%2d", CloudRandom(100)))
+	}
+	return arena
+}
+
 func GameplayPhaseStatusGameplayNew(n int, holder int, f func()) GameplayPhaseStatusGameplay {
 	players := []GameplayPhaseStatusGameplayPlayer{}
 	for i := range n {
@@ -134,14 +151,13 @@ func GameplayPhaseStatusGameplayNew(n int, holder int, f func()) GameplayPhaseSt
 			Hand:         []string{"card" + s + "1", "card" + s + "2", "card" + s + "3"},
 		})
 	}
-	arena := []string{"kw1", "kw2", "kw3"}
 
 	return GameplayPhaseStatusGameplay{
 		ActCount:   1,
 		RoundCount: 1,
 		MoveCount:  1,
 		Player:     players,
-		Arena:      arena,
+		Arena:      fillArena(nil, max(n, 3)),
 		Holder:     holder,
 		Step:       "selection",
 
@@ -432,6 +448,7 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
 		st.Timer.Reset(120 * time.Second)
 	} else {
 		st.Step = "selection"
+		isNewMove = true
 		st.MoveCount += 1
 		st.Holder = (st.Holder + 1) % len(s.Players)
 		// Remove keyword from arena
@@ -439,6 +456,18 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
 			st.Arena[:st.Keyword],
 			st.Arena[st.Keyword+1:]...,
 		)
+		// Replenish hand
+		st.Player[st.Holder].Hand = append(
+			st.Player[st.Holder].Hand,
+			fmt.Sprintf("card%02d", CloudRandom(100)),
+		)
+		if st.MoveCount > len(s.Players) {
+			// New round!
+			st.RoundCount += 1
+			st.MoveCount = 1
+			// Replenish arena
+			st.Arena = fillArena(st.Arena, max(len(s.Players), 3))
+		}
 		st.Timer.Reset(30 * time.Second)
 	}
 
