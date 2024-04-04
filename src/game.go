@@ -576,8 +576,9 @@ func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
 	return entries
 }
 
+// All broadcast subroutines assume the mutex is held (RLock'ed)
+
 func (r *GameRoom) BroadcastStart() {
-	r.Mutex.RLock()
 	for userId, conn := range r.Conns {
 		conn.OutChannel <- OrderedKeysMarshal{
 			{"type", "start"},
@@ -585,19 +586,15 @@ func (r *GameRoom) BroadcastStart() {
 			{"my_index", r.Gameplay.PlayerIndexNullable(userId)},
 		}
 	}
-	r.Mutex.RUnlock()
 }
 
 func (r *GameRoom) BroadcastRoomState() {
-	r.Mutex.RLock()
 	for userId, conn := range r.Conns {
 		conn.OutChannel <- r.StateMessage(userId)
 	}
-	r.Mutex.RUnlock()
 }
 
 func (r *GameRoom) BroadcastAssemblyUpdate() {
-	r.Mutex.RLock()
 	message := OrderedKeysMarshal{
 		{"type", "assembly_update"},
 		{"players", r.Gameplay.PlayerReprs()},
@@ -605,11 +602,9 @@ func (r *GameRoom) BroadcastAssemblyUpdate() {
 	for _, conn := range r.Conns {
 		conn.OutChannel <- message
 	}
-	r.Mutex.RUnlock()
 }
 
 func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, isStarting bool) {
-	r.Mutex.RLock()
 	for userId, conn := range r.Conns {
 		var message OrderedKeysMarshal
 		if isStarting {
@@ -634,11 +629,9 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 		}
 		conn.OutChannel <- message
 	}
-	r.Mutex.RUnlock()
 }
 
 func (r *GameRoom) BroadcastGameProgress(event string) {
-	r.Mutex.RLock()
 	st := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay)
 	for userId, conn := range r.Conns {
 		conn.OutChannel <- OrderedKeysMarshal{
@@ -646,7 +639,6 @@ func (r *GameRoom) BroadcastGameProgress(event string) {
 			{"gameplay_status", st.ReprWithEvent(r.Gameplay.PlayerIndex(userId), event)},
 		}
 	}
-	r.Mutex.RUnlock()
 }
 
 func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
@@ -693,13 +685,11 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if err := r.Gameplay.Seat(user, profile); err != "" {
 			panic(err)
 		}
-		unlock()
 		r.BroadcastAssemblyUpdate()
 	} else if message["type"] == "withdraw" {
 		if err := r.Gameplay.WithdrawSeat(msg.UserId); err != "" {
 			panic(err)
 		}
-		unlock()
 		r.BroadcastAssemblyUpdate()
 	} else if message["type"] == "start" {
 		if msg.UserId != r.Room.Creator {
@@ -721,7 +711,6 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if err := r.Gameplay.Start(r.Signal); err != "" {
 			panic(err)
 		}
-		unlock()
 		r.BroadcastStart()
 	} else if message["type"] == "appointment_accept" || message["type"] == "appointment_pass" {
 		prevHolder, nextHolder, isStarting, err :=
@@ -729,7 +718,6 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if err != "" {
 			panic(err)
 		}
-		unlock()
 		r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
 	} else if message["type"] == "action" {
 		handIndex, ok := message["hand_index"].(float64)
@@ -747,14 +735,12 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if err := r.Gameplay.ActionCheck(msg.UserId, int(handIndex), int(arenaIndex), int(target)); err != "" {
 			panic(err)
 		}
-		unlock()
 		r.BroadcastGameProgress("action_check")
 	} else if message["type"] == "storytelling_end" {
 		isNewMove, err := r.Gameplay.StorytellingEnd(msg.UserId)
 		if err != "" {
 			panic(err)
 		}
-		unlock()
 		var event string
 		if isNewMove {
 			event = "storytelling_end_new_move"
@@ -767,7 +753,6 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if err != "" {
 			panic(err)
 		}
-		unlock()
 		r.BroadcastGameProgress("queue")
 	} else if message["type"] == "comment" {
 	} else {
@@ -843,10 +828,10 @@ loop:
 					r.Mutex.Lock()
 					prevHolder, nextHolder, isStarting, err :=
 						r.Gameplay.AppointmentAcceptOrPass(-1, false, r.Signal)
-					r.Mutex.Unlock()
 					if err == "" {
 						r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
 					}
+					r.Mutex.Unlock()
 
 				case "gameplay":
 					r.Mutex.Lock()
