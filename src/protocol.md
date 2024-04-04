@@ -255,7 +255,7 @@
 
 只有轮到自己讲述时有效。若超时，讲述环节会自动结束，不必再发送此消息。
 
-#### 🔻 讲述状态变更 "storytelling_end"
+#### 🔻 讲述完成 "storytelling_end"
 表示讲述的玩家选择结束，或超时自动结束。
 
 - **storyteller** (number) 完成讲述的玩家座位号
@@ -264,11 +264,7 @@
 - **next_storyteller** (number | null) 下一位轮到讲述的玩家座位号（若非空，则必为被动方；空的情况包括无被动方，或者方才完成讲述的是被动方）
 - **timer** (number | null) 下一位讲述环节的时限，以秒计，精确到小数点后一位
 - **gameplay_status** (object | null) 当 **next_storyteller** 为 null 时非空，这时游戏进入下一回合。含义同 **房间状态 "room_state"**。
-<!--
-- **is_new_round** (boolean) 是否进入新的一轮。若未进入下一回合（即 **next_storyteller** 不为 null），固定为 false。
-- **is_new_act** (boolean) 是否进入新的一幕。与上同理。
--->
-- **is_finish** (boolean) 是否游戏结束<!--。游戏结束时，**is_new_round** 与 **is_new_act** 均同为 true。-->
+- **is_finish** (boolean) 是否游戏结束
 
 环节变更规则，供参考：
 - 若 **is_finish** 为 true，则进入最终结算环节（🚧）；
@@ -294,4 +290,6 @@
 #### 🔻 游戏日志 "log"
 游戏中各类事件均会产生日志。（当前均为纯文本，富文本功能 🚧）
 
-- **log** (string[]) 日志文本，可能包含多条。
+- **log** (object[]) 多条日志
+  - **id** (number) 顺序编号，可用于断线等情况下去重
+  - **content** (string) 日志文本
