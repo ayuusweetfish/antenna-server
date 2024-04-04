@@ -96,7 +96,24 @@ type GameplayPlayer struct {
 }
 type GameplayState struct {
 	Players     []GameplayPlayer
-	PhaseStatus interface{}
+	PhaseStatus interface {
+		Repr(userId int) OrderedKeysMarshal
+	}
+}
+
+func (ps GameplayPhaseStatusAssembly) Repr(userId int) OrderedKeysMarshal {
+	return nil
+}
+func (ps GameplayPhaseStatusAppointment) Repr(userId int) OrderedKeysMarshal {
+	return OrderedKeysMarshal{
+		{"holder", ps.Holder},
+		{"timer", ps.Timer.Remaining().Seconds()},
+	}
+}
+func (ps GameplayPhaseStatusGamelay) Repr(userId int) OrderedKeysMarshal {
+	return OrderedKeysMarshal{
+		{"holder", ps.Holder},
+	}
 }
 
 func (s GameplayState) PlayerReprs() []OrderedKeysMarshal {
@@ -123,20 +140,15 @@ func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
 	switch ps := s.PhaseStatus.(type) {
 	case GameplayPhaseStatusAssembly:
 		phaseName = "assembly"
-		statusRepr = nil
+		statusRepr = ps.Repr(userId)
 
 	case GameplayPhaseStatusAppointment:
 		phaseName = "appointment"
-		statusRepr = OrderedKeysMarshal{
-			{"holder", ps.Holder},
-			{"timer", ps.Timer.Remaining().Seconds()},
-		}
+		statusRepr = ps.Repr(userId)
 
 	case GameplayPhaseStatusGamelay:
 		phaseName = "gameplay"
-		statusRepr = OrderedKeysMarshal{
-			{"holder", ps.Holder},
-		}
+		statusRepr = ps.Repr(userId)
 	}
 
 	entries := OrderedKeysMarshal{
@@ -343,11 +355,7 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 			message = OrderedKeysMarshal{
 				{"type", "appointment_accept"},
 				{"prev_holder", prevVal},
-				// TODO
-				{"gameplay_status", OrderedKeysMarshal{
-					{"user_id", userId},
-					{"holder", nextHolder},
-				}},
+				{"gameplay_status", r.Gameplay.PhaseStatus.(GameplayPhaseStatusGamelay).Repr(userId)},
 			}
 		} else {
 			message = OrderedKeysMarshal{
