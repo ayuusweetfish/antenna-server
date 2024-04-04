@@ -131,6 +131,10 @@ var KeywordSetNames []string = []string{"kwA", "kwB", "kwC", "kwD", "kwE", "kwF"
 
 ////// Gameplay //////
 
+const TimeLimitAppointment = 30 * time.Second
+const TimeLimitCardSelection = 60 * time.Second
+func TimeLimitStorytelling = 180 * time.Second
+
 type GameplayPhaseStatusAssembly struct {
 }
 type GameplayPhaseStatusAppointment struct {
@@ -214,7 +218,7 @@ func GameplayPhaseStatusGameplayNew(n int, holder int, f func()) GameplayPhaseSt
 		Holder:     holder,
 		Step:       "selection",
 
-		Timer: NewPeekableTimerFunc(30*time.Second, f),
+		Timer: NewPeekableTimerFunc(TimeLimitCardSelection, f),
 		Queue: []int{},
 
 		// Current action irrelevant
@@ -349,7 +353,7 @@ func (s *GameplayState) Start(roomSignalChannel chan interface{}) string {
 	s.PhaseStatus = GameplayPhaseStatusAppointment{
 		Holder: CloudRandom(len(s.Players)),
 		Count:  0,
-		Timer: NewPeekableTimerFunc(30*time.Second, func() {
+		Timer: NewPeekableTimerFunc(TimeLimitAppointment, func() {
 			roomSignalChannel <- GameRoomSignalTimer{Type: "appointment"}
 		}),
 	}
@@ -398,7 +402,7 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 			// Continue
 			prev := st.Holder
 			st.Holder = (st.Holder + 1) % len(s.Players)
-			st.Timer.Reset(30 * time.Second)
+			st.Timer.Reset(TimeLimitAppointment)
 			s.PhaseStatus = st
 			return prev, st.Holder, false, ""
 		} else {
@@ -429,13 +433,18 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 
 	playerIndex := st.Holder
 
+	if userId == -1 {
+		handIndex = CloudRandom(len(st.Player[playerIndex].Hand))
+		arenaIndex = CloudRandom(len(st.Arena))
+	}
+
 	if handIndex < 0 || handIndex >= len(st.Player[playerIndex].Hand) {
 		return "`hand_index` out of range"
 	}
 	if arenaIndex < 0 || arenaIndex >= len(st.Arena) {
 		return "`arena_index` out of range"
 	}
-	if target < -2 || target >= len(s.Players) {
+	if target < -1 || target >= len(s.Players) {
 		return "`target` out of range"
 	}
 	if target == playerIndex {
@@ -459,7 +468,7 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 			st.HolderResult = -2
 		}
 	}
-	st.Timer.Reset(120 * time.Second)
+	st.Timer.Reset(TimeLimitStorytelling)
 
 	// Remove card from hand
 	st.Player[playerIndex].Hand = append(
@@ -541,7 +550,7 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
 				st.Holder = CloudRandom(len(s.Players))
 			}
 		}
-		st.Timer.Reset(30 * time.Second)
+		st.Timer.Reset(TimeLimitCardSelection)
 	}
 
 	s.PhaseStatus = st
@@ -885,6 +894,23 @@ loop:
 
 				case "gameplay":
 					r.Mutex.Lock()
+					if st, ok := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay); ok {
+						if st.Step == "selection" {
+							// Select random card
+							r.Gameplay.ActionCheck(-1, -1, -1, -1)
+							r.BroadcastGameProgress("action_check")
+						} else if st.Step == "storytelling_holder" || st.Step == "storytelling_target" {
+							// Stop storytelling
+							isNewMove, _ := r.Gameplay.StorytellingEnd(-1)
+							var event string
+							if isNewMove {
+								event = "storytelling_end_new_move"
+							} else {
+								event = "storytelling_end_next_storyteller"
+							}
+							r.BroadcastGameProgress(event)
+						}
+					}
 					r.Mutex.Unlock()
 				}
 			}
