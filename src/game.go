@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -62,7 +63,7 @@ func (t PeekableTimer) Remaining() time.Duration {
 }
 
 func (t *PeekableTimer) Reset(d time.Duration) {
-	if !t.Timer.Stop() {
+	if t.Timer == nil || !t.Timer.Stop() {
 		if t.Func == nil {
 			t.Timer = time.NewTimer(d)
 		} else {
@@ -75,7 +76,9 @@ func (t *PeekableTimer) Reset(d time.Duration) {
 }
 
 func (t *PeekableTimer) Stop() {
-	t.Timer.Stop()
+	if t.Timer != nil {
+		t.Timer.Stop()
+	}
 }
 
 ////// Gameplay //////
@@ -87,9 +90,62 @@ type GameplayPhaseStatusAppointment struct {
 	Count  int
 	Timer  PeekableTimer
 }
-type GameplayPhaseStatusGamelay struct {
-	Holder int
+type GameplayPhaseStatusGamelayPlayer struct {
+	Relationship [][3]int
+	ActionPoints int
+	Hand         []string
 }
+type GameplayPhaseStatusGamelay struct {
+	ActCount   int
+	RoundCount int
+	MoveCount  int
+	Player     []GameplayPhaseStatusGamelayPlayer
+	Arena      []string
+	Holder     int
+	Step       string
+
+	Timer PeekableTimer
+	Queue []int
+
+	Action           string
+	Keyword          int
+	Target           int
+	HolderDifficulty int
+	HolderResult     int
+	TargetDifficulty int
+	TargetResult     int
+}
+
+func GameplayPhaseStatusGamelayNew(n int, holder int) GameplayPhaseStatusGamelay {
+	players := []GameplayPhaseStatusGamelayPlayer{}
+	for i := range n {
+		s := fmt.Sprintf("%d", i)
+		players = append(players, GameplayPhaseStatusGamelayPlayer{
+			Relationship: make([][3]int, n),
+			ActionPoints: 1,
+			Hand:         []string{"card" + s + "1", "card" + s + "2", "card" + s + "3"},
+		})
+	}
+	arena := []string{"kw1", "kw2", "kw3"}
+
+	return GameplayPhaseStatusGamelay{
+		ActCount:   1,
+		RoundCount: 1,
+		MoveCount:  1,
+		Player:     players,
+		Arena:      arena,
+		Holder:     holder,
+		Step:       "selection",
+
+		Timer: NewPeekableTimerFunc(30 * time.Second, func() {
+			roomSignalChannel <- GameRoomSignalTimer{Type: "gameplay"}
+		}),
+		Queue: []int{},
+
+		// Current action irrelevant
+	}
+}
+
 type GameplayPlayer struct {
 	User
 	Profile
@@ -101,18 +157,28 @@ type GameplayState struct {
 	}
 }
 
-func (ps GameplayPhaseStatusAssembly) Repr(userId int) OrderedKeysMarshal {
+func (ps GameplayPhaseStatusAssembly) Repr(playerIndex int) OrderedKeysMarshal {
 	return nil
 }
-func (ps GameplayPhaseStatusAppointment) Repr(userId int) OrderedKeysMarshal {
+func (ps GameplayPhaseStatusAppointment) Repr(playerIndex int) OrderedKeysMarshal {
 	return OrderedKeysMarshal{
 		{"holder", ps.Holder},
-		{"timer", ps.Timer.Remaining().Seconds()},
+		{"timer", json.Number(fmt.Sprintf("%.1f", ps.Timer.Remaining().Seconds()))},
 	}
 }
-func (ps GameplayPhaseStatusGamelay) Repr(userId int) OrderedKeysMarshal {
+func (ps GameplayPhaseStatusGamelay) Repr(playerIndex int) OrderedKeysMarshal {
 	return OrderedKeysMarshal{
+		{"act_count", ps.ActCount},
+		{"round_count", ps.RoundCount},
+		{"move_count", ps.MoveCount},
+		{"relationship", ps.Player[playerIndex].Relationship},
+		{"action_points", ps.Player[playerIndex].ActionPoints},
+		{"hand", ps.Player[playerIndex].Hand},
+		{"arena", ps.Arena},
 		{"holder", ps.Holder},
+		{"step", ps.Step},
+		{"timer", json.Number(fmt.Sprintf("%.1f", ps.Timer.Remaining().Seconds()))},
+		{"queue", ps.Queue},
 	}
 }
 
@@ -133,6 +199,7 @@ func (s GameplayState) PlayerReprs() []OrderedKeysMarshal {
 func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
 	// Players
 	playerReprs := s.PlayerReprs()
+	playerIndex := s.PlayerIndex(userId)
 
 	// Phase
 	var phaseName string
@@ -140,15 +207,15 @@ func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
 	switch ps := s.PhaseStatus.(type) {
 	case GameplayPhaseStatusAssembly:
 		phaseName = "assembly"
-		statusRepr = ps.Repr(userId)
+		statusRepr = ps.Repr(playerIndex)
 
 	case GameplayPhaseStatusAppointment:
 		phaseName = "appointment"
-		statusRepr = ps.Repr(userId)
+		statusRepr = ps.Repr(playerIndex)
 
 	case GameplayPhaseStatusGamelay:
 		phaseName = "gameplay"
-		statusRepr = ps.Repr(userId)
+		statusRepr = ps.Repr(playerIndex)
 	}
 
 	entries := OrderedKeysMarshal{
@@ -242,16 +309,12 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool) (int, i
 			// Random appointment
 			st.Timer.Stop()
 			luckyDog := CloudRandom(len(s.Players))
-			s.PhaseStatus = GameplayPhaseStatusGamelay{
-				Holder: luckyDog,
-			}
+			s.PhaseStatus = GameplayPhaseStatusGamelayNew(len(s.Players), luckyDog)
 			return st.Holder, luckyDog, true, ""
 		}
 	} else {
 		st.Timer.Stop()
-		s.PhaseStatus = GameplayPhaseStatusGamelay{
-			Holder: st.Holder,
-		}
+		s.PhaseStatus = GameplayPhaseStatusGamelayNew(len(s.Players), st.Holder)
 		return -1, st.Holder, true, ""
 	}
 }
@@ -355,7 +418,9 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 			message = OrderedKeysMarshal{
 				{"type", "appointment_accept"},
 				{"prev_holder", prevVal},
-				{"gameplay_status", r.Gameplay.PhaseStatus.(GameplayPhaseStatusGamelay).Repr(userId)},
+				{"gameplay_status",
+					r.Gameplay.PhaseStatus.(GameplayPhaseStatusGamelay).Repr(
+						r.Gameplay.PlayerIndex(userId))},
 			}
 		} else {
 			message = OrderedKeysMarshal{
@@ -528,6 +593,10 @@ loop:
 					if err == "" {
 						r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
 					}
+
+				case "gameplay":
+					r.Mutex.Lock()
+					r.Mutex.Unlock()
 				}
 			}
 
