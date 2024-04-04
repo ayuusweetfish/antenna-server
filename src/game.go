@@ -270,11 +270,11 @@ func (ps GameplayPhaseStatusGameplay) ReprWithEvent(playerIndex int, event strin
 		{"step", ps.Step},
 		{"action", validOrNil(actionTaken, ps.Action)},
 		{"keyword", validOrNil(actionTaken, ps.Keyword)},
-		{"target", validOrNil(actionTaken, ps.Target)},
+		{"target", validOrNil(actionTaken && ps.Target != -1, ps.Target)},
 		{"holder_difficulty", validOrNil(actionTaken, ps.HolderDifficulty)},
 		{"holder_result", validOrNil(actionTaken, ps.HolderResult)},
-		{"target_difficulty", validOrNil(actionTaken, ps.TargetDifficulty)},
-		{"target_result", validOrNil(actionTaken, ps.TargetResult)},
+		{"target_difficulty", validOrNil(actionTaken && ps.Target != -1, ps.TargetDifficulty)},
+		{"target_result", validOrNil(actionTaken && ps.Target != -1, ps.TargetResult)},
 		{"timer", json.Number(fmt.Sprintf("%.1f", ps.Timer.Remaining().Seconds()))},
 		{"queue", ps.Queue},
 	}
@@ -523,6 +523,9 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 		}
 		st.TargetResult = checkResult(difficulty, s.Players[target].Profile.Stats)
 		applyRelationshipChanges(st.TargetResult, &st.Player[target].Relationship[playerIndex])
+	} else {
+		st.TargetDifficulty = -1
+		st.TargetResult = 0
 	}
 
 	st.Timer.Reset(TimeLimitStorytelling)
