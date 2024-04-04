@@ -60,23 +60,31 @@ window.addEventListener('load', function(evt) {
     ws.onopen = (evt) => {
       unprint()
       print('OPEN', '#4b6', true)
-      input.value = stringify({'type': 'seat', 'profile_id': ~ profile ~})
     }
     ws.onclose = (evt) => {
       print('CLOSE', '#888', true)
       ws = null
       document.getElementById('open_close').innerText = 'Open'
     }
+    let myIndex = undefined
     ws.onmessage = (evt) => {
       print(
         ['RECEIVE', '#46f', true],
         [evt.data, '#238'],
       )
       const obj = tryparse(evt.data)
-      if (obj.type === 'start' && obj.holder === obj.my_index) {
+      if (obj.type === 'room_state' && obj.phase === 'assembly')
+        input.value = stringify({'type': 'seat', 'profile_id': ~ profile ~})
+      if (obj.type === 'start' || obj.type === 'room_state') myIndex = obj.my_index
+      if ((obj.type === 'start' && obj.holder === obj.my_index) ||
+          (obj.type === 'appointment_pass' && obj.next_holder === obj.my_index)) {
         input.value = stringify({'type': 'appointment_accept'})
-      } else if (obj.type === 'appointment_accept') {
-        input.value = stringify({'type': 'action', 'hand_index': 2, 'arena_index': 1})
+      } else if ((obj.type === 'appointment_accept' || obj.type === 'gameplay_progress' || obj.type === 'room_state')
+          && obj.gameplay_status.step === 'selection' && obj.gameplay_status.holder === myIndex) {
+        input.value = stringify({'type': 'action', 'hand_index': 2, 'arena_index': 1, 'target': null})
+      } else if ((obj.type === 'gameplay_progress' || obj.type === 'room_state')
+          && obj.gameplay_status.step.startsWith('storytelling_')) {
+        input.value = stringify({'type': 'storytelling_end'})
       }
     }
     ws.onerror = (evt) => {

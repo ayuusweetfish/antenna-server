@@ -190,6 +190,7 @@ func (ps GameplayPhaseStatusGameplay) ReprWithEvent(playerIndex int, event strin
 		{"step", ps.Step},
 		{"action", validOrNil(actionTaken, ps.Action)},
 		{"keyword", validOrNil(actionTaken, ps.Keyword)},
+		{"target", validOrNil(actionTaken, ps.Target)},
 		{"holder_difficulty", validOrNil(actionTaken, ps.HolderDifficulty)},
 		{"holder_result", validOrNil(actionTaken, ps.HolderResult)},
 		{"target_difficulty", validOrNil(actionTaken, ps.TargetDifficulty)},
@@ -368,6 +369,9 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	if target < -2 || target >= len(s.Players) {
 		return "`target` out of range"
 	}
+	if target == playerIndex {
+		target = -1
+	}
 
 	st.Step = "storytelling_holder"
 	st.Action = st.Player[playerIndex].Hand[handIndex]
@@ -393,16 +397,53 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 		st.Player[playerIndex].Hand[:handIndex],
 		st.Player[playerIndex].Hand[handIndex+1:]...,
 	)
-	/*
-		// Remove keyword from arena
-		st.Arena = append(
-			st.Arena[:arenaIndex],
-			st.Arena[arenaIndex+1:]...,
-		)
-	*/
 	s.PhaseStatus = st
 
 	return ""
+}
+
+// Returns (isNewMove, error)
+func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
+	st, ok := s.PhaseStatus.(GameplayPhaseStatusGameplay)
+	if !ok {
+		return false, "Not in gameplay phase"
+	}
+
+	var storyteller int
+	var nextStoryteller int
+	if st.Step == "storytelling_holder" {
+		storyteller = st.Holder
+		nextStoryteller = st.Target // Can be -1
+	} else if st.Step == "storytelling_target" {
+		storyteller = st.Target
+		nextStoryteller = -1
+	} else {
+		return false, "Not in storytelling step"
+	}
+
+	if userId != -1 && s.Players[storyteller].User.Id != userId {
+		return false, "Not storyteller"
+	}
+
+	var isNewMove bool
+	if nextStoryteller != -1 {
+		st.Step = "storytelling_target"
+		isNewMove = false
+		st.Timer.Reset(120 * time.Second)
+	} else {
+		st.Step = "selection"
+		st.MoveCount += 1
+		st.Holder = (st.Holder + 1) % len(s.Players)
+		// Remove keyword from arena
+		st.Arena = append(
+			st.Arena[:st.Keyword],
+			st.Arena[st.Keyword+1:]...,
+		)
+		st.Timer.Reset(30 * time.Second)
+	}
+
+	s.PhaseStatus = st
+	return isNewMove, ""
 }
 
 ////// Room //////
@@ -492,7 +533,6 @@ func (r *GameRoom) BroadcastAssemblyUpdate() {
 
 func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, isStarting bool) {
 	r.Mutex.RLock()
-	st := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay)
 	for userId, conn := range r.Conns {
 		var message OrderedKeysMarshal
 		if isStarting {
@@ -502,6 +542,7 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 			} else {
 				prevVal = prevHolder
 			}
+			st := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay)
 			message = OrderedKeysMarshal{
 				{"type", "appointment_accept"},
 				{"prev_holder", prevVal},
@@ -524,6 +565,7 @@ func (r *GameRoom) BroadcastGameProgress(event string) {
 	st := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay)
 	for userId, conn := range r.Conns {
 		conn.OutChannel <- OrderedKeysMarshal{
+			{"type", "gameplay_progress"},
 			{"gameplay_status", st.ReprWithEvent(r.Gameplay.PlayerIndex(userId), event)},
 		}
 	}
@@ -630,6 +672,21 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		}
 		unlock()
 		r.BroadcastGameProgress("action_check")
+	} else if message["type"] == "storytelling_end" {
+		isNewMove, err := r.Gameplay.StorytellingEnd(msg.UserId)
+		if err != "" {
+			panic(err)
+		}
+		unlock()
+		var event string
+		if isNewMove {
+			event = "storytelling_end_new_move"
+		} else {
+			event = "storytelling_end_next_storyteller"
+		}
+		r.BroadcastGameProgress(event)
+	} else if message["type"] == "queue" {
+	} else if message["type"] == "comment" {
 	} else {
 		panic("Unknown type")
 	}
