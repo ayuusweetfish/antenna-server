@@ -36,6 +36,14 @@ type GameRoomSignalTimer struct {
 
 ////// Miscellaneous utilities //////
 
+func validOrNil(valid bool, val interface{}) interface{} {
+	if valid {
+		return val
+	} else {
+		return nil
+	}
+}
+
 type PeekableTimer struct {
 	Timer   *time.Timer
 	Expires time.Time
@@ -90,16 +98,16 @@ type GameplayPhaseStatusAppointment struct {
 	Count  int
 	Timer  PeekableTimer
 }
-type GameplayPhaseStatusGamelayPlayer struct {
+type GameplayPhaseStatusGameplayPlayer struct {
 	Relationship [][3]int
 	ActionPoints int
 	Hand         []string
 }
-type GameplayPhaseStatusGamelay struct {
+type GameplayPhaseStatusGameplay struct {
 	ActCount   int
 	RoundCount int
 	MoveCount  int
-	Player     []GameplayPhaseStatusGamelayPlayer
+	Player     []GameplayPhaseStatusGameplayPlayer
 	Arena      []string
 	Holder     int
 	Step       string
@@ -116,11 +124,11 @@ type GameplayPhaseStatusGamelay struct {
 	TargetResult     int
 }
 
-func GameplayPhaseStatusGamelayNew(n int, holder int) GameplayPhaseStatusGamelay {
-	players := []GameplayPhaseStatusGamelayPlayer{}
+func GameplayPhaseStatusGameplayNew(n int, holder int, f func()) GameplayPhaseStatusGameplay {
+	players := []GameplayPhaseStatusGameplayPlayer{}
 	for i := range n {
 		s := fmt.Sprintf("%d", i)
-		players = append(players, GameplayPhaseStatusGamelayPlayer{
+		players = append(players, GameplayPhaseStatusGameplayPlayer{
 			Relationship: make([][3]int, n),
 			ActionPoints: 1,
 			Hand:         []string{"card" + s + "1", "card" + s + "2", "card" + s + "3"},
@@ -128,7 +136,7 @@ func GameplayPhaseStatusGamelayNew(n int, holder int) GameplayPhaseStatusGamelay
 	}
 	arena := []string{"kw1", "kw2", "kw3"}
 
-	return GameplayPhaseStatusGamelay{
+	return GameplayPhaseStatusGameplay{
 		ActCount:   1,
 		RoundCount: 1,
 		MoveCount:  1,
@@ -137,9 +145,7 @@ func GameplayPhaseStatusGamelayNew(n int, holder int) GameplayPhaseStatusGamelay
 		Holder:     holder,
 		Step:       "selection",
 
-		Timer: NewPeekableTimerFunc(30 * time.Second, func() {
-			roomSignalChannel <- GameRoomSignalTimer{Type: "gameplay"}
-		}),
+		Timer: NewPeekableTimerFunc(30*time.Second, f),
 		Queue: []int{},
 
 		// Current action irrelevant
@@ -166,8 +172,13 @@ func (ps GameplayPhaseStatusAppointment) Repr(playerIndex int) OrderedKeysMarsha
 		{"timer", json.Number(fmt.Sprintf("%.1f", ps.Timer.Remaining().Seconds()))},
 	}
 }
-func (ps GameplayPhaseStatusGamelay) Repr(playerIndex int) OrderedKeysMarshal {
+func (ps GameplayPhaseStatusGameplay) Repr(playerIndex int) OrderedKeysMarshal {
+	return ps.ReprWithEvent(playerIndex, "none")
+}
+func (ps GameplayPhaseStatusGameplay) ReprWithEvent(playerIndex int, event string) OrderedKeysMarshal {
+	actionTaken := (ps.Step == "storytelling_holder" || ps.Step == "storytelling_target")
 	return OrderedKeysMarshal{
+		{"event", event},
 		{"act_count", ps.ActCount},
 		{"round_count", ps.RoundCount},
 		{"move_count", ps.MoveCount},
@@ -177,6 +188,12 @@ func (ps GameplayPhaseStatusGamelay) Repr(playerIndex int) OrderedKeysMarshal {
 		{"arena", ps.Arena},
 		{"holder", ps.Holder},
 		{"step", ps.Step},
+		{"action", validOrNil(actionTaken, ps.Action)},
+		{"keyword", validOrNil(actionTaken, ps.Keyword)},
+		{"holder_difficulty", validOrNil(actionTaken, ps.HolderDifficulty)},
+		{"holder_result", validOrNil(actionTaken, ps.HolderResult)},
+		{"target_difficulty", validOrNil(actionTaken, ps.TargetDifficulty)},
+		{"target_result", validOrNil(actionTaken, ps.TargetResult)},
 		{"timer", json.Number(fmt.Sprintf("%.1f", ps.Timer.Remaining().Seconds()))},
 		{"queue", ps.Queue},
 	}
@@ -213,7 +230,7 @@ func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
 		phaseName = "appointment"
 		statusRepr = ps.Repr(playerIndex)
 
-	case GameplayPhaseStatusGamelay:
+	case GameplayPhaseStatusGameplay:
 		phaseName = "gameplay"
 		statusRepr = ps.Repr(playerIndex)
 	}
@@ -229,6 +246,9 @@ func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
 }
 
 func (s *GameplayState) Seat(user User, profile Profile) string {
+	if _, ok := s.PhaseStatus.(GameplayPhaseStatusAssembly); !ok {
+		return "Not in assembly phase"
+	}
 	// Check duplicate
 	for _, p := range s.Players {
 		if p.User.Id == user.Id {
@@ -240,6 +260,9 @@ func (s *GameplayState) Seat(user User, profile Profile) string {
 }
 
 func (s *GameplayState) WithdrawSeat(userId int) string {
+	if _, ok := s.PhaseStatus.(GameplayPhaseStatusAssembly); !ok {
+		return "Not in assembly phase"
+	}
 	for i, p := range s.Players {
 		if p.User.Id == userId {
 			s.Players = append(s.Players[:i], s.Players[i+1:]...)
@@ -286,14 +309,17 @@ func (s GameplayState) PlayerIndexNullable(userId int) interface{} {
 // - the next player to hold (if the next return value is `false`)
 // - the player to take the first move (if the next return value is `true`)
 // - the error message
-func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool) (int, int, bool, string) {
-	var st GameplayPhaseStatusAppointment
-	var ok bool
-	if st, ok = s.PhaseStatus.(GameplayPhaseStatusAppointment); !ok {
+func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSignalChannel chan interface{}) (int, int, bool, string) {
+	st, ok := s.PhaseStatus.(GameplayPhaseStatusAppointment)
+	if !ok {
 		return -1, -1, false, "Not in appointment phase"
 	}
 	if userId != -1 && s.Players[st.Holder].User.Id != userId {
 		return -1, -1, false, "Not move holder"
+	}
+
+	f := func() {
+		roomSignalChannel <- GameRoomSignalTimer{Type: "gameplay"}
 	}
 
 	if !accept {
@@ -309,14 +335,74 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool) (int, i
 			// Random appointment
 			st.Timer.Stop()
 			luckyDog := CloudRandom(len(s.Players))
-			s.PhaseStatus = GameplayPhaseStatusGamelayNew(len(s.Players), luckyDog)
+			s.PhaseStatus = GameplayPhaseStatusGameplayNew(len(s.Players), luckyDog, f)
 			return st.Holder, luckyDog, true, ""
 		}
 	} else {
 		st.Timer.Stop()
-		s.PhaseStatus = GameplayPhaseStatusGamelayNew(len(s.Players), st.Holder)
+		s.PhaseStatus = GameplayPhaseStatusGameplayNew(len(s.Players), st.Holder, f)
 		return -1, st.Holder, true, ""
 	}
+}
+
+func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, target int) string {
+	st, ok := s.PhaseStatus.(GameplayPhaseStatusGameplay)
+	if !ok {
+		return "Not in gameplay phase"
+	}
+	if userId != -1 && s.Players[st.Holder].User.Id != userId {
+		return "Not move holder"
+	}
+	if st.Step != "selection" {
+		return "Not in selection step"
+	}
+
+	playerIndex := st.Holder
+
+	if handIndex < 0 || handIndex >= len(st.Player[playerIndex].Hand) {
+		return "`hand_index` out of range"
+	}
+	if arenaIndex < 0 || arenaIndex >= len(st.Arena) {
+		return "`arena_index` out of range"
+	}
+	if target < -2 || target >= len(s.Players) {
+		return "`target` out of range"
+	}
+
+	st.Step = "storytelling_holder"
+	st.Action = st.Player[playerIndex].Hand[handIndex]
+	st.Keyword = arenaIndex
+	st.Target = target
+	st.HolderDifficulty = CloudRandom(100)
+	// TODO
+	if st.HolderDifficulty < 50 {
+		st.HolderResult = 1
+		if st.HolderDifficulty <= 5 {
+			st.HolderResult = 2
+		}
+	} else {
+		st.HolderResult = -1
+		if st.HolderDifficulty >= 90 {
+			st.HolderResult = -2
+		}
+	}
+	st.Timer.Reset(120 * time.Second)
+
+	// Remove card from hand
+	st.Player[playerIndex].Hand = append(
+		st.Player[playerIndex].Hand[:handIndex],
+		st.Player[playerIndex].Hand[handIndex+1:]...,
+	)
+	/*
+		// Remove keyword from arena
+		st.Arena = append(
+			st.Arena[:arenaIndex],
+			st.Arena[arenaIndex+1:]...,
+		)
+	*/
+	s.PhaseStatus = st
+
+	return ""
 }
 
 ////// Room //////
@@ -406,6 +492,7 @@ func (r *GameRoom) BroadcastAssemblyUpdate() {
 
 func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, isStarting bool) {
 	r.Mutex.RLock()
+	st := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay)
 	for userId, conn := range r.Conns {
 		var message OrderedKeysMarshal
 		if isStarting {
@@ -418,9 +505,7 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 			message = OrderedKeysMarshal{
 				{"type", "appointment_accept"},
 				{"prev_holder", prevVal},
-				{"gameplay_status",
-					r.Gameplay.PhaseStatus.(GameplayPhaseStatusGamelay).Repr(
-						r.Gameplay.PlayerIndex(userId))},
+				{"gameplay_status", st.Repr(r.Gameplay.PlayerIndex(userId))},
 			}
 		} else {
 			message = OrderedKeysMarshal{
@@ -430,6 +515,17 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 			}
 		}
 		conn.OutChannel <- message
+	}
+	r.Mutex.RUnlock()
+}
+
+func (r *GameRoom) BroadcastGameProgress(event string) {
+	r.Mutex.RLock()
+	st := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay)
+	for userId, conn := range r.Conns {
+		conn.OutChannel <- OrderedKeysMarshal{
+			{"gameplay_status", st.ReprWithEvent(r.Gameplay.PlayerIndex(userId), event)},
+		}
 	}
 	r.Mutex.RUnlock()
 }
@@ -510,12 +606,30 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		r.BroadcastStart()
 	} else if message["type"] == "appointment_accept" || message["type"] == "appointment_pass" {
 		prevHolder, nextHolder, isStarting, err :=
-			r.Gameplay.AppointmentAcceptOrPass(msg.UserId, message["type"] == "appointment_accept")
+			r.Gameplay.AppointmentAcceptOrPass(msg.UserId, message["type"] == "appointment_accept", r.Signal)
 		if err != "" {
 			panic(err)
 		}
 		unlock()
 		r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
+	} else if message["type"] == "action" {
+		handIndex, ok := message["hand_index"].(float64)
+		if !ok {
+			panic("Incorrect `hand_index`")
+		}
+		arenaIndex, ok := message["arena_index"].(float64)
+		if !ok {
+			panic("Incorrect `arena_index`")
+		}
+		target, ok := message["target"].(float64)
+		if !ok {
+			target = -1
+		}
+		if err := r.Gameplay.ActionCheck(msg.UserId, int(handIndex), int(arenaIndex), int(target)); err != "" {
+			panic(err)
+		}
+		unlock()
+		r.BroadcastGameProgress("action_check")
 	} else {
 		panic("Unknown type")
 	}
@@ -588,7 +702,7 @@ loop:
 				case "appointment":
 					r.Mutex.Lock()
 					prevHolder, nextHolder, isStarting, err :=
-						r.Gameplay.AppointmentAcceptOrPass(-1, false)
+						r.Gameplay.AppointmentAcceptOrPass(-1, false, r.Signal)
 					r.Mutex.Unlock()
 					if err == "" {
 						r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)

@@ -45,10 +45,10 @@ window.addEventListener('load', function(evt) {
       return null
     }
   }
+  const stringify = (obj) => JSON.stringify(obj, undefined, 2)
   document.getElementById('open_close').onclick = (evt) => {
     if (ws) {
       ws.close()
-      document.getElementById('open_close').innerText = 'Open'
       return false
     }
     document.cookie = 'auth=!' + user.value + '; SameSite=Strict; Path=/; Secure; Max-Age=604800'
@@ -60,11 +60,12 @@ window.addEventListener('load', function(evt) {
     ws.onopen = (evt) => {
       unprint()
       print('OPEN', '#4b6', true)
-      input.value = JSON.stringify({"type": "seat", "profile_id": ~ profile ~}, undefined, 2)
+      input.value = stringify({'type': 'seat', 'profile_id': ~ profile ~})
     }
     ws.onclose = (evt) => {
       print('CLOSE', '#888', true)
       ws = null
+      document.getElementById('open_close').innerText = 'Open'
     }
     ws.onmessage = (evt) => {
       print(
@@ -72,6 +73,11 @@ window.addEventListener('load', function(evt) {
         [evt.data, '#238'],
       )
       const obj = tryparse(evt.data)
+      if (obj.type === 'start' && obj.holder === obj.my_index) {
+        input.value = stringify({'type': 'appointment_accept'})
+      } else if (obj.type === 'appointment_accept') {
+        input.value = stringify({'type': 'action', 'hand_index': 2, 'arena_index': 1})
+      }
     }
     ws.onerror = (evt) => {
       unprint()
@@ -92,7 +98,7 @@ window.addEventListener('load', function(evt) {
     ws.send(input.value)
     const obj = tryparse(input.value)
     if (obj.type === 'seat') {
-      input.value = JSON.stringify({'type': 'start'}, undefined, 2)
+      input.value = stringify({'type': 'start'})
     }
     return false
   }
