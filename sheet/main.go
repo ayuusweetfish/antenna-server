@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -82,6 +83,17 @@ func tryParseRow(row []string) (Card, error) {
 	return card, nil
 }
 
+func commaSep(values []int) string {
+	var b strings.Builder
+	for i, v := range values {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(strconv.Itoa(v))
+	}
+	return b.String()
+}
+
 func main() {
 	defer func() {
 		if obj := recover(); obj != nil {
@@ -100,10 +112,20 @@ func main() {
 	rows, err := f.GetRows(activeSheet)
 	panicIf(err)
 
+	occurrenceRowIndex := make(map[string]int) // For deduplication
 	for i, row := range rows {
 		card, err := tryParseRow(row)
 		if err == nil {
-			fmt.Println(card)
+			// fmt.Println(card)
+			// Check for duplication
+			if j, ok := occurrenceRowIndex[card.Name]; ok {
+				fmt.Fprintf(os.Stderr, "Skipped row %d (%s duplicate at row %d)\n",
+					i, card.Name, j)
+				continue
+			}
+			occurrenceRowIndex[card.Name] = i
+			fmt.Printf(`"%s": {[]int{%s}, %d, [3]int{%s}},`+"\n",
+				card.Name, commaSep(card.Condition), card.Growth, commaSep(card.RelationshipChange[:]))
 		} else {
 			fmt.Fprintf(os.Stderr, "Skipped row %d (%v)\n", i+1, err)
 		}
