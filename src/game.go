@@ -545,33 +545,35 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 	}
 }
 
-func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, target int) string {
+// (error message, log content)
+func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, target int) (string, string) {
 	st, ok := s.PhaseStatus.(GameplayPhaseStatusGameplay)
 	if !ok {
-		return "Not in gameplay phase"
+		return "Not in gameplay phase", ""
 	}
 	if userId != -1 && s.Players[st.Holder].User.Id != userId {
-		return "Not move holder"
+		return "Not move holder", ""
 	}
 	if st.Step != "selection" {
-		return "Not in selection step"
+		return "Not in selection step", ""
 	}
 
 	playerIndex := st.Holder
 
 	if userId == -1 {
+		userId = s.Players[st.Holder].User.Id
 		handIndex = CloudRandom(len(st.Player[playerIndex].Hand))
 		arenaIndex = CloudRandom(len(st.Arena))
 	}
 
 	if handIndex < 0 || handIndex >= len(st.Player[playerIndex].Hand) {
-		return "`hand_index` out of range"
+		return "`hand_index` out of range", ""
 	}
 	if arenaIndex < 0 || arenaIndex >= len(st.Arena) {
-		return "`arena_index` out of range"
+		return "`arena_index` out of range", ""
 	}
 	if target < -1 || target >= len(s.Players) {
-		return "`target` out of range"
+		return "`target` out of range", ""
 	}
 	if target == playerIndex {
 		target = -1
@@ -582,6 +584,8 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	st.Keyword = arenaIndex
 	st.Target = target
 	st.HolderDifficulty = CloudRandom(100)
+
+	keyword := st.Arena[st.Keyword]
 
 	// Check
 	card := CardSet[st.Action]
@@ -659,7 +663,16 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 
 	s.PhaseStatus = st
 
-	return ""
+	// Game log
+	logContent := fmt.Sprintf(
+		"座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】",
+		playerIndex + 1,
+		UserNickname(userId),
+		st.Action, 
+		keyword,
+	)
+
+	return "", logContent
 }
 
 // Returns (isNewMove, error)
@@ -889,7 +902,7 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 	}
 }
 
-func (r *GameRoom) BroadcastLog(userId int, text string) {
+func (r *GameRoom) BroadcastLog(text string) {
 	// Append to log
 	// Keep only 5 latest
 	entry := GameRoomLog{Id: 0, Content: text}
@@ -919,6 +932,15 @@ func (r *GameRoom) BroadcastGameProgress(event string) {
 			{"gameplay_status", st.ReprWithEvent(r.Gameplay.PlayerIndex(userId), event)},
 		}
 	}
+}
+
+func UserNickname(userId int) string {
+	u := User{Id: userId}
+	ok := u.LoadById()
+	if !ok {
+		panic("Cannot load user info?")
+	}
+	return u.Nickname
 }
 
 func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
@@ -1012,10 +1034,12 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if !ok {
 			target = -1
 		}
-		if err := r.Gameplay.ActionCheck(msg.UserId, int(handIndex), int(arenaIndex), int(target)); err != "" {
+		err, logContent := r.Gameplay.ActionCheck(msg.UserId, int(handIndex), int(arenaIndex), int(target))
+		if err != "" {
 			panic(err)
 		}
 		r.BroadcastGameProgress("action_check")
+		r.BroadcastLog(logContent)
 	} else if message["type"] == "storytelling_end" {
 		isNewMove, err := r.Gameplay.StorytellingEnd(msg.UserId)
 		if err != "" {
@@ -1036,11 +1060,6 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		r.BroadcastGameProgress("queue")
 	} else if message["type"] == "comment" {
 		text := fmt.Sprintf("%v", message["text"])
-		u := User{Id: msg.UserId}
-		ok := u.LoadById()
-		if !ok {
-			panic("Cannot load user info?")
-		}
 		playerIndexStr := ""
 		// If past assembly phase, display player index
 		_, isAssembly := r.Gameplay.PhaseStatus.(GameplayPhaseStatusAssembly)
@@ -1048,8 +1067,8 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 			playerIndexStr = fmt.Sprintf("座位 %d ", r.Gameplay.PlayerIndex(msg.UserId) + 1)
 		}
 		logContent := fmt.Sprintf("%s玩家【%s】说：%s",
-			playerIndexStr, u.Nickname, text)
-		r.BroadcastLog(msg.UserId, logContent)
+			playerIndexStr, UserNickname(msg.UserId), text)
+		r.BroadcastLog(logContent)
 	} else {
 		panic("Unknown type")
 	}
@@ -1135,8 +1154,9 @@ loop:
 					if st, ok := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay); ok {
 						if st.Step == "selection" {
 							// Select random card
-							r.Gameplay.ActionCheck(-1, -1, -1, -1)
+							_, logContent := r.Gameplay.ActionCheck(-1, -1, -1, -1)
 							r.BroadcastGameProgress("action_check")
+							r.BroadcastLog(logContent)
 						} else if st.Step == "storytelling_holder" || st.Step == "storytelling_target" {
 							// Stop storytelling
 							isNewMove, _ := r.Gameplay.StorytellingEnd(-1)
