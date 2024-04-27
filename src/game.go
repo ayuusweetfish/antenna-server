@@ -820,6 +820,20 @@ func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
 	return entries
 }
 
+func (r *GameRoom) LogMessage() OrderedKeysMarshal {
+	logsReprs := []OrderedKeysMarshal{}
+	for _, entry := range r.Log {
+		logsReprs = append(logsReprs, OrderedKeysMarshal{
+			{"id", entry.Id},
+			{"content", entry.Content},
+		})
+	}
+	return OrderedKeysMarshal{
+		{"type", "log"},
+		{"log", logsReprs},
+	}
+}
+
 // All broadcast subroutines assume the mutex is held (RLock'ed)
 
 func (r *GameRoom) BroadcastStart() {
@@ -891,19 +905,7 @@ func (r *GameRoom) BroadcastLog(userId int, text string) {
 		r.Log = append(r.Log, entry)
 	}
 
-	// Convert to JSON representation
-	logs := []OrderedKeysMarshal{}
-	for _, entry := range r.Log {
-		logs = append(logs, OrderedKeysMarshal{
-			{"id", entry.Id},
-			{"content", entry.Content},
-		})
-	}
-
-	message := OrderedKeysMarshal{
-		{"type", "log"},
-		{"log", logs},
-	}
+	message := r.LogMessage()
 	for _, conn := range r.Conns {
 		conn.OutChannel <- message
 	}
@@ -1099,9 +1101,11 @@ loop:
 				}
 				r.Mutex.RLock()
 				conn := r.Conns[sigNewConn.UserId]
-				message := r.StateMessage(sigNewConn.UserId)
+				stateMessage := r.StateMessage(sigNewConn.UserId)
+				logMessage := r.LogMessage()
 				r.Mutex.RUnlock()
-				conn.OutChannel <- message
+				conn.OutChannel <- stateMessage
+				conn.OutChannel <- logMessage
 			}
 			if sigLostConn, ok := sig.(GameRoomSignalLostConn); ok {
 				r.Mutex.Lock()
