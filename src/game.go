@@ -763,6 +763,11 @@ func (s *GameplayState) Queue(userId int) string {
 
 ////// Room //////
 
+type GameRoomLog struct {
+	Id      int
+	Content string
+}
+
 type GameRoom struct {
 	Room
 	Closed    bool
@@ -770,6 +775,7 @@ type GameRoom struct {
 	InChannel chan GameRoomInMessage
 	Signal    chan interface{}
 	Gameplay  GameplayState
+	Log       []GameRoomLog
 	Mutex     *sync.RWMutex
 }
 
@@ -865,6 +871,40 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 				{"next_holder", nextHolder},
 			}
 		}
+		conn.OutChannel <- message
+	}
+}
+
+func (r *GameRoom) BroadcastLog(userId int, text string) {
+	// Append to log
+	// Keep only 5 latest
+	entry := GameRoomLog{Id: 0, Content: text}
+	if len(r.Log) >= 1 {
+		entry.Id = r.Log[len(r.Log)-1].Id + 1
+	}
+	if len(r.Log) >= 5 {
+		for i := range 4 {
+			r.Log[i] = r.Log[i+1]
+		}
+		r.Log[4] = entry
+	} else {
+		r.Log = append(r.Log, entry)
+	}
+
+	// Convert to JSON representation
+	logs := []OrderedKeysMarshal{}
+	for _, entry := range r.Log {
+		logs = append(logs, OrderedKeysMarshal{
+			{"id", entry.Id},
+			{"content", entry.Content},
+		})
+	}
+
+	message := OrderedKeysMarshal{
+		{"type", "log"},
+		{"log", logs},
+	}
+	for _, conn := range r.Conns {
 		conn.OutChannel <- message
 	}
 }
@@ -993,6 +1033,21 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		}
 		r.BroadcastGameProgress("queue")
 	} else if message["type"] == "comment" {
+		text := fmt.Sprintf("%v", message["text"])
+		u := User{Id: msg.UserId}
+		ok := u.LoadById()
+		if !ok {
+			panic("Cannot load user info?")
+		}
+		playerIndexStr := ""
+		// If past assembly phase, display player index
+		_, isAssembly := r.Gameplay.PhaseStatus.(GameplayPhaseStatusAssembly)
+		if !isAssembly {
+			playerIndexStr = fmt.Sprintf("座位 %d ", r.Gameplay.PlayerIndex(msg.UserId) + 1)
+		}
+		logContent := fmt.Sprintf("%s玩家【%s】说：%s",
+			playerIndexStr, u.Nickname, text)
+		r.BroadcastLog(msg.UserId, logContent)
 	} else {
 		panic("Unknown type")
 	}
