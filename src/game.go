@@ -472,18 +472,25 @@ func (s *GameplayState) WithdrawSeat(userId int) string {
 	return "Not seated"
 }
 
-func (s *GameplayState) Start(roomSignalChannel chan interface{}) string {
+// (error, log content)
+func (s *GameplayState) Start(roomSignalChannel chan interface{}) (string, string) {
 	if _, ok := s.PhaseStatus.(GameplayPhaseStatusAssembly); !ok {
-		return "Not in assembly phase"
+		return "Not in assembly phase", ""
 	}
-	s.PhaseStatus = GameplayPhaseStatusAppointment{
+	st := GameplayPhaseStatusAppointment{
 		Holder: CloudRandom(len(s.Players)),
 		Count:  0,
 		Timer: NewPeekableTimerFunc(TimeLimitAppointment, func() {
 			roomSignalChannel <- GameRoomSignalTimer{Type: "appointment"}
 		}),
 	}
-	return ""
+	s.PhaseStatus = st
+
+	logContent := fmt.Sprintf(
+		"座位 %d 玩家【%s】收到起始玩家指派，等待选择",
+		st.Holder+1, s.Players[st.Holder].User.Nickname,
+	)
+	return "", logContent
 }
 
 func (s GameplayState) PlayerIndex(userId int) int {
@@ -509,13 +516,14 @@ func (s GameplayState) PlayerIndexNullable(userId int) interface{} {
 // - the next player to hold (if the next return value is `false`)
 // - the player to take the first move (if the next return value is `true`)
 // - the error message
-func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSignalChannel chan interface{}) (int, int, bool, string) {
+// - the log content
+func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSignalChannel chan interface{}) (int, int, bool, string, string) {
 	st, ok := s.PhaseStatus.(GameplayPhaseStatusAppointment)
 	if !ok {
-		return -1, -1, false, "Not in appointment phase"
+		return -1, -1, false, "Not in appointment phase", ""
 	}
 	if userId != -1 && s.Players[st.Holder].User.Id != userId {
-		return -1, -1, false, "Not move holder"
+		return -1, -1, false, "Not move holder", ""
 	}
 
 	f := func() {
@@ -530,18 +538,32 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 			st.Holder = (st.Holder + 1) % len(s.Players)
 			st.Timer.Reset(TimeLimitAppointment)
 			s.PhaseStatus = st
-			return prev, st.Holder, false, ""
+			logContent := fmt.Sprintf(
+				"座位 %d 玩家【%s】跳过指派，轮到座位 %d 玩家【%s】",
+				prev+1, s.Players[prev].User.Nickname,
+				st.Holder+1, s.Players[st.Holder].User.Nickname,
+			)
+			return prev, st.Holder, false, "", logContent
 		} else {
 			// Random appointment
 			st.Timer.Stop()
 			luckyDog := CloudRandom(len(s.Players))
 			s.PhaseStatus = GameplayPhaseStatusGameplayNew(len(s.Players), luckyDog, f)
-			return st.Holder, luckyDog, true, ""
+			logContent := fmt.Sprintf(
+				"座位 %d 玩家【%s】跳过指派。随机抽取座位 %d 玩家【%s】开始游戏",
+				st.Holder+1, s.Players[st.Holder].User.Nickname,
+				luckyDog+1, s.Players[luckyDog].User.Nickname,
+			)
+			return st.Holder, luckyDog, true, "", logContent
 		}
 	} else {
 		st.Timer.Stop()
 		s.PhaseStatus = GameplayPhaseStatusGameplayNew(len(s.Players), st.Holder, f)
-		return -1, st.Holder, true, ""
+		logContent := fmt.Sprintf(
+			"座位 %d 玩家【%s】接受指派，作为起始玩家开始游戏",
+			st.Holder+1, s.Players[st.Holder].User.Nickname,
+		)
+		return -1, st.Holder, true, "", logContent
 	}
 }
 
@@ -1058,17 +1080,20 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 				panic(fmt.Sprintf("Player (ID %d) is not seated", userId))
 			}
 		}
-		if err := r.Gameplay.Start(r.Signal); err != "" {
+		err, logContent := r.Gameplay.Start(r.Signal)
+		if err != "" {
 			panic(err)
 		}
 		r.BroadcastStart()
+		r.BroadcastLog(logContent)
 	} else if message["type"] == "appointment_accept" || message["type"] == "appointment_pass" {
-		prevHolder, nextHolder, isStarting, err :=
+		prevHolder, nextHolder, isStarting, err, logContent :=
 			r.Gameplay.AppointmentAcceptOrPass(msg.UserId, message["type"] == "appointment_accept", r.Signal)
 		if err != "" {
 			panic(err)
 		}
 		r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
+		r.BroadcastLog(logContent)
 	} else if message["type"] == "action" {
 		handIndex, ok := message["hand_index"].(float64)
 		if !ok {
@@ -1191,11 +1216,12 @@ loop:
 				switch sigTimer.Type {
 				case "appointment":
 					r.Mutex.Lock()
-					prevHolder, nextHolder, isStarting, err :=
+					prevHolder, nextHolder, isStarting, err, logContent :=
 						r.Gameplay.AppointmentAcceptOrPass(-1, false, r.Signal)
 					if err == "" {
 						r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
 					}
+					r.BroadcastLog(logContent)
 					r.Mutex.Unlock()
 
 				case "gameplay":
