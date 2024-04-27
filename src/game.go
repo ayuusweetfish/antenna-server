@@ -445,31 +445,33 @@ func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
 	return entries
 }
 
-func (s *GameplayState) Seat(user User, profile Profile) string {
+func (s *GameplayState) Seat(user User, profile Profile) (string, string) {
 	if _, ok := s.PhaseStatus.(GameplayPhaseStatusAssembly); !ok {
-		return "Not in assembly phase"
+		return "Not in assembly phase", ""
 	}
 	// Check duplicate
 	for _, p := range s.Players {
 		if p.User.Id == user.Id {
-			return "Already seated"
+			return "Already seated", ""
 		}
 	}
 	s.Players = append(s.Players, GameplayPlayer{User: user, Profile: profile})
-	return ""
+	logContent := fmt.Sprintf("玩家【%s】坐下", user.Nickname)
+	return "", logContent
 }
 
-func (s *GameplayState) WithdrawSeat(userId int) string {
+func (s *GameplayState) WithdrawSeat(userId int) (string, string) {
 	if _, ok := s.PhaseStatus.(GameplayPhaseStatusAssembly); !ok {
-		return "Not in assembly phase"
+		return "Not in assembly phase", ""
 	}
 	for i, p := range s.Players {
 		if p.User.Id == userId {
 			s.Players = append(s.Players[:i], s.Players[i+1:]...)
-			return ""
+			logContent := fmt.Sprintf("玩家【%s】离座", p.User.Nickname)
+			return "", logContent
 		}
 	}
-	return "Not seated"
+	return "Not seated", ""
 }
 
 // (error, log content)
@@ -1054,15 +1056,19 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if profile.Creator != user.Id {
 			panic("Not creator")
 		}
-		if err := r.Gameplay.Seat(user, profile); err != "" {
+		err, logContent := r.Gameplay.Seat(user, profile)
+		if err != "" {
 			panic(err)
 		}
 		r.BroadcastAssemblyUpdate()
+		r.BroadcastLog(logContent)
 	} else if message["type"] == "withdraw" {
-		if err := r.Gameplay.WithdrawSeat(msg.UserId); err != "" {
+		err, logContent := r.Gameplay.WithdrawSeat(msg.UserId)
+		if err != "" {
 			panic(err)
 		}
 		r.BroadcastAssemblyUpdate()
+		r.BroadcastLog(logContent)
 	} else if message["type"] == "start" {
 		if msg.UserId != r.Room.Creator {
 			panic("Not room creator")
