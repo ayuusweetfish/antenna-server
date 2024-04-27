@@ -664,22 +664,46 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	s.PhaseStatus = st
 
 	// Game log
-	logContent := fmt.Sprintf(
-		"座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】",
-		playerIndex + 1,
-		UserNickname(userId),
-		st.Action, 
-		keyword,
-	)
-
+	resultString := func(result int) string {
+		if result == 2 {
+			return "大成功"
+		} else if result == 1 {
+			return "成功"
+		} else if result == -1 {
+			return "失败"
+		} else if result == -2 {
+			return "大失败"
+		}
+		return "……？"
+	}
+	logContent := ""
+	if target == -1 {
+		logContent = fmt.Sprintf(
+			"座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】。难度判定为 %d，结果为【%s】。轮到玩家【%s】讲述。",
+			playerIndex+1, UserNickname(userId),
+			st.Action, keyword,
+			st.HolderDifficulty, resultString(st.HolderResult),
+			UserNickname(userId),
+		)
+	} else {
+		logContent = fmt.Sprintf(
+			"座位 %d 玩家【%s】对座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】。主动方难度判定为 %d，结果为【%s】；被动方难度判定为 %d，结果为【%s】。轮到玩家【%s】讲述。",
+			playerIndex+1, UserNickname(userId),
+			target+1, UserNickname(s.Players[target].User.Id),
+			st.Action, keyword,
+			st.HolderDifficulty, resultString(st.HolderResult),
+			st.TargetDifficulty, resultString(st.TargetResult),
+			UserNickname(userId),
+		)
+	}
 	return "", logContent
 }
 
-// Returns (isNewMove, error)
-func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
+// Returns (isNewMove, error, log content)
+func (s *GameplayState) StorytellingEnd(userId int) (bool, string, string) {
 	st, ok := s.PhaseStatus.(GameplayPhaseStatusGameplay)
 	if !ok {
-		return false, "Not in gameplay phase"
+		return false, "Not in gameplay phase", ""
 	}
 
 	var storyteller int
@@ -691,11 +715,11 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
 		storyteller = st.Target
 		nextStoryteller = -1
 	} else {
-		return false, "Not in storytelling step"
+		return false, "Not in storytelling step", ""
 	}
 
 	if userId != -1 && s.Players[storyteller].User.Id != userId {
-		return false, "Not storyteller"
+		return false, "Not storyteller", ""
 	}
 
 	var isNewMove bool
@@ -746,7 +770,27 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string) {
 	}
 
 	s.PhaseStatus = st
-	return isNewMove, ""
+
+	logContent := ""
+	if nextStoryteller == -1 {
+		newProgressStr := "进入下一回合"
+		if st.MoveCount == 1 {
+			newProgressStr = "进入新一轮"
+		}
+		logContent = fmt.Sprintf(
+			"座位 %d 玩家【%s】完成讲述。%s，由座位 %d 玩家【%s】选择手牌",
+			storyteller+1, s.Players[storyteller].User.Nickname,
+			newProgressStr,
+			st.Holder+1, s.Players[st.Holder].User.Nickname,
+		)
+	} else {
+		logContent = fmt.Sprintf(
+			"座位 %d 玩家【%s】完成讲述，轮到座位 %d 玩家【%s】继续讲述",
+			storyteller+1, s.Players[storyteller].User.Nickname,
+			nextStoryteller+1, s.Players[nextStoryteller].User.Nickname,
+		)
+	}
+	return isNewMove, "", logContent
 }
 
 func (s *GameplayState) Queue(userId int) string {
@@ -833,9 +877,13 @@ func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
 	return entries
 }
 
-func (r *GameRoom) LogMessage() OrderedKeysMarshal {
+func (r *GameRoom) LogMessage(history bool) OrderedKeysMarshal {
 	logsReprs := []OrderedKeysMarshal{}
-	for _, entry := range r.Log {
+	logs := r.Log
+	if !history && len(r.Log) >= 1 {
+		logs = r.Log[len(r.Log)-1:]
+	}
+	for _, entry := range logs {
 		logsReprs = append(logsReprs, OrderedKeysMarshal{
 			{"id", entry.Id},
 			{"content", entry.Content},
@@ -918,7 +966,7 @@ func (r *GameRoom) BroadcastLog(text string) {
 		r.Log = append(r.Log, entry)
 	}
 
-	message := r.LogMessage()
+	message := r.LogMessage(false)
 	for _, conn := range r.Conns {
 		conn.OutChannel <- message
 	}
@@ -1041,7 +1089,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		r.BroadcastGameProgress("action_check")
 		r.BroadcastLog(logContent)
 	} else if message["type"] == "storytelling_end" {
-		isNewMove, err := r.Gameplay.StorytellingEnd(msg.UserId)
+		isNewMove, err, logContent := r.Gameplay.StorytellingEnd(msg.UserId)
 		if err != "" {
 			panic(err)
 		}
@@ -1052,6 +1100,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 			event = "storytelling_end_next_storyteller"
 		}
 		r.BroadcastGameProgress(event)
+		r.BroadcastLog(logContent)
 	} else if message["type"] == "queue" {
 		err := r.Gameplay.Queue(msg.UserId)
 		if err != "" {
@@ -1064,7 +1113,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		// If past assembly phase, display player index
 		_, isAssembly := r.Gameplay.PhaseStatus.(GameplayPhaseStatusAssembly)
 		if !isAssembly {
-			playerIndexStr = fmt.Sprintf("座位 %d ", r.Gameplay.PlayerIndex(msg.UserId) + 1)
+			playerIndexStr = fmt.Sprintf("座位 %d ", r.Gameplay.PlayerIndex(msg.UserId)+1)
 		}
 		logContent := fmt.Sprintf("%s玩家【%s】说：%s",
 			playerIndexStr, UserNickname(msg.UserId), text)
@@ -1121,7 +1170,7 @@ loop:
 				r.Mutex.RLock()
 				conn := r.Conns[sigNewConn.UserId]
 				stateMessage := r.StateMessage(sigNewConn.UserId)
-				logMessage := r.LogMessage()
+				logMessage := r.LogMessage(true)
 				r.Mutex.RUnlock()
 				conn.OutChannel <- stateMessage
 				conn.OutChannel <- logMessage
@@ -1159,7 +1208,7 @@ loop:
 							r.BroadcastLog(logContent)
 						} else if st.Step == "storytelling_holder" || st.Step == "storytelling_target" {
 							// Stop storytelling
-							isNewMove, _ := r.Gameplay.StorytellingEnd(-1)
+							isNewMove, _, logContent := r.Gameplay.StorytellingEnd(-1)
 							var event string
 							if isNewMove {
 								event = "storytelling_end_new_move"
@@ -1167,6 +1216,7 @@ loop:
 								event = "storytelling_end_next_storyteller"
 							}
 							r.BroadcastGameProgress(event)
+							r.BroadcastLog(logContent)
 						}
 					}
 					r.Mutex.Unlock()
