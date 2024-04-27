@@ -1,3 +1,5 @@
+github.com/Lofanmi/pinyin-golang v0.0.0-20211114132645-1db892057f20 h1:QUwRV0ZgSjXBJnKOJh0T5rqe1jLWxlR5AvBLWSYJ7qg=
+github.com/Lofanmi/pinyin-golang v0.0.0-20211114132645-1db892057f20/go.mod h1:J7A5UW8HA8b8lsEO/OshykiGGfmdQEnbDE53D23JsXE=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 h1:RWengNIwukTxcDr9M+97sNutRR1RKhG96O6jWumTTnw=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826/go.mod h1:TaXosZuwdSHYgviHp1DAtfrULt5eUgsSMsZf+YrPgl8=
 github.com/richardlehane/mscfb v1.0.4 h1:WULscsljNPConisD5hR0+OyZjwK46Pfyr6mPu5ZawpM=

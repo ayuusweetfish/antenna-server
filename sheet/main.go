@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Lofanmi/pinyin-golang/pinyin"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -100,6 +101,11 @@ func main() {
 			fmt.Fprintln(os.Stderr, obj)
 		}
 	}()
+
+	dict := pinyin.NewDict()
+	s := dict.Convert(`浪漫反应`, " ").ASCII()
+	fmt.Println(s)
+	return
 
 	// Open file
 	f, err := excelize.OpenFile("1.xlsx")
