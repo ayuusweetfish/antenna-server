@@ -9,7 +9,15 @@
 </head><body>
 
 <div>
-  <strong>User ID: <span id='uid'></span> — Nickname: <span id='nickname'></span></strong>
+  User ID: <span id='uid'></span> — Nickname: <strong><span id='nickname'></span></strong><br>
+  Room ID: <span id='rid'></span> — Title: <strong><span id='room-title'></span></strong> — [<strong><span id='room-tags'></span></strong>] — by <strong><span id='room-creator'></span></strong>
+</div>
+<div>
+  <style>
+    #state-msg.error { color: #a43; }
+    #state-msg.info { color: #394; }
+  </style>
+  <strong><span id='state-msg'></span></strong>
 </div>
 
 <script src='main.js'></script>
