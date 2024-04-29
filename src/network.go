@@ -185,6 +185,11 @@ func logInHandler(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, user.Repr())
 }
 
+func meHandler(w http.ResponseWriter, r *http.Request) {
+	user := auth(w, r)
+	write(w, 200, user.Repr())
+}
+
 func profileCUHandler(w http.ResponseWriter, r *http.Request, createNew bool) {
 	user := auth(w, r)
 	if err := r.ParseForm(); err != nil {
@@ -504,6 +509,7 @@ func ServerListen() {
 
 	mux.HandleFunc("POST /sign-up", signUpHandler)
 	mux.HandleFunc("POST /log-in", logInHandler)
+	mux.HandleFunc("GET /me", meHandler)
 
 	mux.HandleFunc("POST /profile/create", profileCreateHandler)
 	mux.HandleFunc("POST /profile/{profile_id}/update", profileUpdateHandler)

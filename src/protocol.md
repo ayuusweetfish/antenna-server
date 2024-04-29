@@ -46,6 +46,11 @@
 响应 401：用户名或密码错误
 - 纯文本 "No such user" 或 "Incorrect password"
 
+### 🔵 关于自己 GET /me
+
+响应 200
+- (User) 当前登录玩家的用户信息
+
 ### 📙 角色档案数据结构 Profile
 
 - **id** (number) 档案 ID
