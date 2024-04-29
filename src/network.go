@@ -74,6 +74,13 @@ func auth(w http.ResponseWriter, r *http.Request) User {
 		}
 	}
 	if cookieValue == "" {
+		// Try Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader[0:7] == "Bearer " {
+			cookieValue = authHeader[7:]
+		}
+	}
+	if cookieValue == "" {
 		panic("401 Authentication required")
 	}
 	userId := validateAuthToken(cookieValue)
@@ -503,6 +510,23 @@ func (h *errCaptureHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Handler.ServeHTTP(w, r)
 }
 
+// A handler that allows all cross-origin requests
+type corsAllowAllHandler struct {
+	Handler http.Handler
+}
+
+func (h *corsAllowAllHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Upgrade")
+	if r.Method == "OPTIONS" {
+		// Intercept OPTIONS requests
+		w.Write([]byte{})
+	} else {
+		h.Handler.ServeHTTP(w, r)
+	}
+}
+
 func ServerListen() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", versionInfoHandler)
@@ -523,12 +547,16 @@ func ServerListen() {
 	mux.HandleFunc("GET /room/{room_id}", roomGetHandler)
 	mux.HandleFunc("GET /room/{room_id}/channel", roomChannelHandler)
 
+	var handler http.Handler
+	handler = &errCaptureHandler{Handler: mux}
+
 	if Config.Debug {
 		mux.HandleFunc("GET /test", testHandler)
 		mux.HandleFunc("GET /test/{room_id}", testHandler)
 		mux.HandleFunc("GET /test/{room_id}/{player_id}", testHandler)
 		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
 		mux.HandleFunc("GET /data", dataInspectionHandler)
+		handler = &corsAllowAllHandler{Handler: handler}
 	}
 
 	port := Config.Port
@@ -537,7 +565,7 @@ func ServerListen() {
 		log.Printf("Visit http://localhost:%d/debug/pprof/ for profiling stats\n", port)
 	}
 	server := &http.Server{
-		Handler:      &errCaptureHandler{Handler: mux},
+		Handler:      handler,
 		Addr:         fmt.Sprintf("localhost:%d", port),
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
