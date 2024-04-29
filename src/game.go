@@ -845,8 +845,9 @@ func (s *GameplayState) Queue(userId int) string {
 ////// Room //////
 
 type GameRoomLog struct {
-	Id      int
-	Content string
+	Id        int
+	Timestamp int64
+	Content   string
 }
 
 type GameRoom struct {
@@ -910,6 +911,7 @@ func (r *GameRoom) LogMessage(history bool) OrderedKeysMarshal {
 	for _, entry := range logs {
 		logsReprs = append(logsReprs, OrderedKeysMarshal{
 			{"id", entry.Id},
+			{"timestamp", entry.Timestamp},
 			{"content", entry.Content},
 		})
 	}
@@ -977,7 +979,7 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 func (r *GameRoom) BroadcastLog(text string) {
 	// Append to log
 	// Keep only 5 latest
-	entry := GameRoomLog{Id: 0, Content: text}
+	entry := GameRoomLog{Id: 0, Timestamp: time.Now().Unix(), Content: text}
 	if len(r.Log) >= 1 {
 		entry.Id = r.Log[len(r.Log)-1].Id + 1
 	}

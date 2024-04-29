@@ -279,4 +279,5 @@
 
 - **log** (object[]) 多条日志
   - **id** (number) 顺序编号，可用于断线等情况下去重
+  - **timestamp** (number) Unix 时间戳，以秒计
   - **content** (string) 日志文本
