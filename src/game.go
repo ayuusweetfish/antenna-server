@@ -496,6 +496,11 @@ func (s *GameplayState) Start(roomSignalChannel chan interface{}) (string, strin
 	return "", logContent
 }
 
+func (s *GameplayState) Reset() {
+	s.Players = []GameplayPlayer{}
+	s.PhaseStatus = GameplayPhaseStatusAssembly{}
+}
+
 func (s GameplayState) PlayerIndex(userId int) int {
 	for i, p := range s.Players {
 		if p.User.Id == userId {
@@ -724,11 +729,11 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	return "", logContent
 }
 
-// Returns (isNewMove, error, log content)
-func (s *GameplayState) StorytellingEnd(userId int) (bool, string, string) {
+// Returns (isNewMove, isGameEnd, error, log content)
+func (s *GameplayState) StorytellingEnd(userId int) (bool, bool, string, string) {
 	st, ok := s.PhaseStatus.(GameplayPhaseStatusGameplay)
 	if !ok {
-		return false, "Not in gameplay phase", ""
+		return false, false, "Not in gameplay phase", ""
 	}
 
 	var storyteller int
@@ -740,14 +745,15 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string, string) {
 		storyteller = st.Target
 		nextStoryteller = -1
 	} else {
-		return false, "Not in storytelling step", ""
+		return false, false, "Not in storytelling step", ""
 	}
 
 	if userId != -1 && s.Players[storyteller].User.Id != userId {
-		return false, "Not storyteller", ""
+		return false, false, "Not storyteller", ""
 	}
 
-	var isNewMove bool
+	isNewMove := false
+	isGameEnd := false
 	if nextStoryteller != -1 {
 		st.Step = "storytelling_target"
 		isNewMove = false
@@ -781,6 +787,15 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string, string) {
 				// New round!
 				st.RoundCount += 1
 				st.MoveCount = 1
+				actRounds := []int{1, 2, 1, 1}
+				if st.RoundCount > actRounds[st.ActCount-1] {
+					st.ActCount += 1
+					st.RoundCount = 1
+					if st.ActCount > 4 {
+						// Game end!
+						isGameEnd = true
+					}
+				}
 				// Replenish arena
 				st.Arena = fillArena(st.Arena, max(len(s.Players), 3))
 				// Replenish action points
@@ -797,9 +812,13 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string, string) {
 	s.PhaseStatus = st
 
 	logContent := ""
-	if nextStoryteller == -1 {
+	if isGameEnd {
+		logContent = "游戏结束！"
+	} else if nextStoryteller == -1 {
 		newProgressStr := "进入下一回合"
-		if st.MoveCount == 1 {
+		if st.RoundCount == 1 {
+			newProgressStr = fmt.Sprintf("进入第 %d 幕", st.ActCount)
+		} else if st.MoveCount == 1 {
 			newProgressStr = "进入新一轮"
 		}
 		logContent = fmt.Sprintf(
@@ -815,7 +834,7 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string, string) {
 			nextStoryteller+1, s.Players[nextStoryteller].User.Nickname,
 		)
 	}
-	return isNewMove, "", logContent
+	return isNewMove, isGameEnd, "", logContent
 }
 
 func (s *GameplayState) Queue(userId int) string {
@@ -1013,6 +1032,16 @@ func (r *GameRoom) BroadcastGameProgress(event string) {
 	}
 }
 
+func (r *GameRoom) BroadcastGameEnd() {
+	st := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay)
+	for userId, conn := range r.Conns {
+		conn.OutChannel <- OrderedKeysMarshal{
+			{"type", "game_end"},
+			{"relationship", st.Player[r.Gameplay.PlayerIndex(userId)].Relationship},
+		}
+	}
+}
+
 func UserNickname(userId int) string {
 	u := User{Id: userId}
 	ok := u.LoadById()
@@ -1127,18 +1156,24 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		r.BroadcastGameProgress("action_check")
 		r.BroadcastLog(logContent)
 	} else if message["type"] == "storytelling_end" {
-		isNewMove, err, logContent := r.Gameplay.StorytellingEnd(msg.UserId)
+		isNewMove, isGameEnd, err, logContent := r.Gameplay.StorytellingEnd(msg.UserId)
 		if err != "" {
 			panic(err)
 		}
-		var event string
-		if isNewMove {
-			event = "storytelling_end_new_move"
+		if isGameEnd {
+			r.BroadcastLog(logContent)
+			r.BroadcastGameEnd()
+			r.Gameplay.Reset()
 		} else {
-			event = "storytelling_end_next_storyteller"
+			var event string
+			if isNewMove {
+				event = "storytelling_end_new_move"
+			} else {
+				event = "storytelling_end_next_storyteller"
+			}
+			r.BroadcastGameProgress(event)
+			r.BroadcastLog(logContent)
 		}
-		r.BroadcastGameProgress(event)
-		r.BroadcastLog(logContent)
 	} else if message["type"] == "queue" {
 		err := r.Gameplay.Queue(msg.UserId)
 		if err != "" {
@@ -1247,15 +1282,22 @@ loop:
 							r.BroadcastLog(logContent)
 						} else if st.Step == "storytelling_holder" || st.Step == "storytelling_target" {
 							// Stop storytelling
-							isNewMove, _, logContent := r.Gameplay.StorytellingEnd(-1)
-							var event string
-							if isNewMove {
-								event = "storytelling_end_new_move"
+							isNewMove, isGameEnd, _, logContent := r.Gameplay.StorytellingEnd(-1)
+							// XXX: DRY
+							if isGameEnd {
+								r.BroadcastLog(logContent)
+								r.BroadcastGameEnd()
+								r.Gameplay.Reset()
 							} else {
-								event = "storytelling_end_next_storyteller"
+								var event string
+								if isNewMove {
+									event = "storytelling_end_new_move"
+								} else {
+									event = "storytelling_end_next_storyteller"
+								}
+								r.BroadcastGameProgress(event)
+								r.BroadcastLog(logContent)
 							}
-							r.BroadcastGameProgress(event)
-							r.BroadcastLog(logContent)
 						}
 					}
 					r.Mutex.Unlock()
