@@ -36,6 +36,45 @@
 <div id='log'>
 </div>
 
+<style>
+.hidden {
+  display: none;
+}
+</style>
+
+<div id='assembly-panel' class='hidden'>
+<style>
+#assembly-panel button {
+  display: block;
+}
+#assembly-panel label {
+  display: inline-block;
+  width: 2em;
+}
+</style>
+
+<h3>Assembly phase</h3>
+<div id='profiles'></div>
+<details>
+  <summary>New profile</summary>
+  <div>Race <input id='pf-race'></div>
+  <div>Background <input id='pf-background'></div>
+  <div><label for='stat-1'>Se</label><input type='range' min='10' max='90' value='30' id='stat-1'><span id='value-stat-1'></span></div>
+  <div><label for='stat-2'>Si</label><input type='range' min='10' max='90' value='30' id='stat-2'><span id='value-stat-2'></span></div>
+  <div><label for='stat-3'>Ne</label><input type='range' min='10' max='90' value='30' id='stat-3'><span id='value-stat-3'></span></div>
+  <div><label for='stat-4'>Ni</label><input type='range' min='10' max='90' value='30' id='stat-4'><span id='value-stat-4'></span></div>
+  <div><label for='stat-5'>Te</label><input type='range' min='10' max='90' value='30' id='stat-5'><span id='value-stat-5'></span></div>
+  <div><label for='stat-6'>Ti</label><input type='range' min='10' max='90' value='30' id='stat-6'><span id='value-stat-6'></span></div>
+  <div><label for='stat-7'>Fe</label><input type='range' min='10' max='90' value='30' id='stat-7'><span id='value-stat-7'></span></div>
+  <div><label for='stat-8'>Fi</label><input type='range' min='10' max='90' value='30' id='stat-8'><span id='value-stat-8'></span></div>
+  <button id='btn-new-profile'>Create</button>
+</details>
+</div>
+
+<div id='gameplay-panel' class='hidden'>
+<h3>Gameplay phase</h3>
+</div>
+
 <script src='main.js'></script>
 
 </body></html>
