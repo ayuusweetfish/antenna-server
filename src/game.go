@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 )
@@ -703,7 +704,7 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	logContent := ""
 	if target == -1 {
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】。难度判定为 %d，结果为【%s】。轮到玩家【%s】讲述。",
+			"座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n难度判定为 %d，结果为【%s】\n轮到玩家【%s】讲述",
 			playerIndex+1, UserNickname(userId),
 			st.Action, keyword,
 			st.HolderDifficulty, resultString(st.HolderResult),
@@ -711,7 +712,7 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 		)
 	} else {
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】对座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】。主动方难度判定为 %d，结果为【%s】；被动方难度判定为 %d，结果为【%s】。轮到玩家【%s】讲述。",
+			"座位 %d 玩家【%s】对座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n主动方难度判定为 %d，结果为【%s】\n被动方难度判定为 %d，结果为【%s】\n轮到玩家【%s】讲述",
 			playerIndex+1, UserNickname(userId),
 			target+1, UserNickname(s.Players[target].User.Id),
 			st.Action, keyword,
@@ -802,14 +803,14 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, string, string) {
 			newProgressStr = "进入新一轮"
 		}
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】完成讲述。%s，由座位 %d 玩家【%s】选择手牌",
+			"座位 %d 玩家【%s】完成讲述\n%s，由座位 %d 玩家【%s】选择手牌",
 			storyteller+1, s.Players[storyteller].User.Nickname,
 			newProgressStr,
 			st.Holder+1, s.Players[st.Holder].User.Nickname,
 		)
 	} else {
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】完成讲述，轮到座位 %d 玩家【%s】继续讲述",
+			"座位 %d 玩家【%s】完成讲述\n轮到座位 %d 玩家【%s】继续讲述",
 			storyteller+1, s.Players[storyteller].User.Nickname,
 			nextStoryteller+1, s.Players[nextStoryteller].User.Nickname,
 		)
@@ -902,11 +903,11 @@ func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
 	return entries
 }
 
-func (r *GameRoom) LogMessage(history bool) OrderedKeysMarshal {
+func (r *GameRoom) LogMessage(history int) OrderedKeysMarshal {
 	logsReprs := []OrderedKeysMarshal{}
 	logs := r.Log
-	if !history && len(r.Log) >= 1 {
-		logs = r.Log[len(r.Log)-1:]
+	if history > 0 {
+		logs = r.Log[len(r.Log)-history:]
 	}
 	for _, entry := range logs {
 		logsReprs = append(logsReprs, OrderedKeysMarshal{
@@ -977,22 +978,26 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 }
 
 func (r *GameRoom) BroadcastLog(text string) {
+	lines := strings.Split(text, "\n")
+
 	// Append to log
 	// Keep only 5 latest
-	entry := GameRoomLog{Id: 0, Timestamp: time.Now().Unix(), Content: text}
-	if len(r.Log) >= 1 {
-		entry.Id = r.Log[len(r.Log)-1].Id + 1
-	}
-	if len(r.Log) >= 5 {
-		for i := range 4 {
-			r.Log[i] = r.Log[i+1]
+	for _, line := range lines {
+		entry := GameRoomLog{Id: 0, Timestamp: time.Now().Unix(), Content: line}
+		if len(r.Log) >= 1 {
+			entry.Id = r.Log[len(r.Log)-1].Id + 1
 		}
-		r.Log[4] = entry
-	} else {
-		r.Log = append(r.Log, entry)
+		if len(r.Log) >= 5 {
+			for i := range 4 {
+				r.Log[i] = r.Log[i+1]
+			}
+			r.Log[4] = entry
+		} else {
+			r.Log = append(r.Log, entry)
+		}
 	}
 
-	message := r.LogMessage(false)
+	message := r.LogMessage(len(lines))
 	for _, conn := range r.Conns {
 		conn.OutChannel <- message
 	}
@@ -1203,7 +1208,7 @@ loop:
 				r.Mutex.RLock()
 				conn := r.Conns[sigNewConn.UserId]
 				stateMessage := r.StateMessage(sigNewConn.UserId)
-				logMessage := r.LogMessage(true)
+				logMessage := r.LogMessage(0)
 				r.Mutex.RUnlock()
 				conn.OutChannel <- stateMessage
 				conn.OutChannel <- logMessage
