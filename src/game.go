@@ -814,12 +814,13 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, bool, string, string)
 	logContent := ""
 	if isGameEnd {
 		logContent = "游戏结束！"
-	} else if nextStoryteller == -1 {
+	} else if nextStoryteller == -1 { // isNewMove == true
 		newProgressStr := "进入下一回合"
-		if st.RoundCount == 1 {
-			newProgressStr = fmt.Sprintf("进入第 %d 幕", st.ActCount)
-		} else if st.MoveCount == 1 {
+		if st.MoveCount == 1 {
 			newProgressStr = "进入新一轮"
+			if st.RoundCount == 1 {
+				newProgressStr = fmt.Sprintf("进入第 %d 幕", st.ActCount)
+			}
 		}
 		logContent = fmt.Sprintf(
 			"座位 %d 玩家【%s】完成讲述\n%s，由座位 %d 玩家【%s】选择手牌",
