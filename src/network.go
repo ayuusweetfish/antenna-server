@@ -76,7 +76,7 @@ func auth(w http.ResponseWriter, r *http.Request) User {
 	if cookieValue == "" {
 		// Try Authorization header
 		authHeader := r.Header.Get("Authorization")
-		if authHeader[0:7] == "Bearer " {
+		if len(authHeader) >= 7 && authHeader[0:7] == "Bearer " {
 			cookieValue = authHeader[7:]
 		}
 	}
