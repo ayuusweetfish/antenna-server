@@ -44,8 +44,30 @@ const reconnect = () => {
   ws.onmessage = (evt) => {
     const o = JSON.parse(evt.data)
     console.log(o)
+    if (o.type === 'log') {
+      processLogs(o.log)
+    }
   }
 }
 reconnect()
+
+const htmlEscape = (s) =>
+  s.replaceAll('&', '&amp;')
+   .replaceAll('<', '&lt;')
+   .replaceAll('>', '&gt;')
+   .replaceAll('"', '&quot;')
+   .replaceAll("'", '&apos;')
+
+const processLogs = (logs) => {
+  const elContainer = document.getElementById('log')
+  for (const l of logs) {
+    const id = `log-id-${l.id}`
+    if (document.getElementById(id)) continue
+    const node = document.createElement('p')
+    node.id = id
+    node.innerHTML = `<span class='timestamp'>${(new Date(l.timestamp * 1000)).toISOString().substring(11, 19)}</span> ${htmlEscape(l.content)}`
+    elContainer.appendChild(node)
+  }
+}
 
 })()
