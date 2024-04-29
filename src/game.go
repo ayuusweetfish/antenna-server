@@ -710,20 +710,20 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	if target == -1 {
 		logContent = fmt.Sprintf(
 			"座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n难度判定为 %d，结果为【%s】\n轮到玩家【%s】讲述",
-			playerIndex+1, UserNickname(userId),
+			playerIndex+1, s.Players[playerIndex].User.Nickname,
 			st.Action, keyword,
 			st.HolderDifficulty, resultString(st.HolderResult),
-			UserNickname(userId),
+			s.Players[playerIndex].User.Nickname,
 		)
 	} else {
 		logContent = fmt.Sprintf(
 			"座位 %d 玩家【%s】对座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n主动方难度判定为 %d，结果为【%s】\n被动方难度判定为 %d，结果为【%s】\n轮到玩家【%s】讲述",
-			playerIndex+1, UserNickname(userId),
-			target+1, UserNickname(s.Players[target].User.Id),
+			playerIndex+1, s.Players[playerIndex].User.Nickname,
+			target+1, s.Players[target].User.Nickname,
 			st.Action, keyword,
 			st.HolderDifficulty, resultString(st.HolderResult),
 			st.TargetDifficulty, resultString(st.TargetResult),
-			UserNickname(userId),
+			s.Players[playerIndex].User.Nickname,
 		)
 	}
 	return "", logContent
@@ -815,15 +815,12 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, bool, string, string)
 	if isGameEnd {
 		logContent = "游戏结束！"
 	} else if nextStoryteller == -1 { // isNewMove == true
-		newProgressStr := "进入下一回合"
+		newProgressStr := "进入下一回合，"
 		if st.MoveCount == 1 {
-			newProgressStr = "进入新一轮"
-			if st.RoundCount == 1 {
-				newProgressStr = fmt.Sprintf("进入第 %d 幕", st.ActCount)
-			}
+			newProgressStr = fmt.Sprintf("【第 %d 幕，第 %d 轮】\n", st.ActCount, st.RoundCount)
 		}
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】完成讲述\n%s，由座位 %d 玩家【%s】选择手牌",
+			"座位 %d 玩家【%s】完成讲述\n%s由座位 %d 玩家【%s】选择手牌",
 			storyteller+1, s.Players[storyteller].User.Nickname,
 			newProgressStr,
 			st.Holder+1, s.Players[st.Holder].User.Nickname,
@@ -1043,15 +1040,6 @@ func (r *GameRoom) BroadcastGameEnd() {
 	}
 }
 
-func UserNickname(userId int) string {
-	u := User{Id: userId}
-	ok := u.LoadById()
-	if !ok {
-		panic("Cannot load user info?")
-	}
-	return u.Nickname
-}
-
 func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 	var conn WebSocketConn
 
@@ -1184,13 +1172,14 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 	} else if message["type"] == "comment" {
 		text := fmt.Sprintf("%v", message["text"])
 		playerIndexStr := ""
+		playerIndex := r.Gameplay.PlayerIndex(msg.UserId)
 		// If past assembly phase, display player index
 		_, isAssembly := r.Gameplay.PhaseStatus.(GameplayPhaseStatusAssembly)
 		if !isAssembly {
-			playerIndexStr = fmt.Sprintf("座位 %d ", r.Gameplay.PlayerIndex(msg.UserId)+1)
+			playerIndexStr = fmt.Sprintf("座位 %d ", playerIndex+1)
 		}
 		logContent := fmt.Sprintf("%s玩家【%s】说：%s",
-			playerIndexStr, UserNickname(msg.UserId), text)
+			playerIndexStr, r.Gameplay.Players[playerIndex].User.Nickname, text)
 		r.BroadcastLog(logContent)
 	} else {
 		panic("Unknown type")
