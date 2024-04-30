@@ -9,9 +9,9 @@
 </head><body>
 
 <div>
-  User ID: <span id='uid'></span> — Nickname: <strong><span id='nickname'></span></strong> 　 · 　
-  Room ID: <span id='rid'></span> — Title: <strong><span id='room-title'></span></strong> — [<strong><span id='room-tags'></span></strong>] — by <strong><span id='room-creator'></span></strong>
-  <span id='progress-indicator' class='hidden'>　 · 　 Act <strong><span id='act-num'></span></strong>, Round <strong><span id='round-num'></span></strong></span>
+  玩家 ID：<span id='uid'></span> — 昵称：<strong><span id='nickname'></span></strong> 　 · 　
+  房间 ID：<span id='rid'></span> — <strong><span id='room-title'></span></strong> [<strong><span id='room-tags'></span></strong>] — 房主 <strong><span id='room-creator'></span></strong>
+  <span id='progress-indicator' class='hidden'>　 · 　 第 <strong><span id='act-num'></span></strong> 幕，第 <strong><span id='round-num'></span></strong> 轮</span>
 
   <style>
     #state-msg.error { color: #a43; }
@@ -20,6 +20,12 @@
   </style>
   <strong><span id='state-msg'></span></strong>
 </div>
+
+<style>
+h3 {
+  margin: 2ex 0 1ex 0;
+}
+</style>
 
 <style>
 #logs-container {
@@ -38,13 +44,13 @@
 }
 </style>
 <div id='logs-container'>
-  <h3>Logs</h3>
+  <h3>游戏记录</h3>
   <div id='log'>
   </div>
   <br>
   <div id='comment'>
-    <input type='text' placeholder='Comment' id='txt-comment'>
-    <button id='btn-comment'>Send</button>
+    <input type='text' placeholder='发言' id='txt-comment'>
+    <button id='btn-comment'>发送</button>
   </div>
 </div>
 
@@ -76,9 +82,12 @@
 }
 </style>
 <div id='players-container'>
-  <h3>Players</h3>
+  <h3>玩家列表</h3>
   <div id='players'>
   </div>
+  <style>
+    #timer { margin-top: 0.5ex; }
+  </style>
   <div id='timer'>⏱️ <strong><span id='timer-display'></span></strong></div>
 </div>
 
@@ -99,18 +108,18 @@
 }
 </style>
 
-<h3>Assembly phase</h3>
+<h3>房间组建中，选择一个角色档案坐下</h3>
 <div id='seat-withdraw' class='hidden'>
-  Seated with profile <span id='seated-profile'></span>
+  已坐下，角色档案 <span id='seated-profile'></span>
   <br>
-  <button id='btn-seat-withdraw'>Leave seat</button>
+  <button id='btn-seat-withdraw'>离座</button>
 </div>
 <div id='seat-profiles' class='hidden'>
 <div id='profiles'></div>
 <details>
-  <summary>New profile</summary>
-  <div>Race <input id='pf-race'></div>
-  <div>Background <input id='pf-background'></div>
+  <summary>新建角色档案</summary>
+  <div>种族 <input id='pf-race'></div>
+  <div>背景 <input id='pf-background'></div>
   <div><label for='stat-1'>Se</label><input type='range' min='10' max='90' value='30' id='stat-1'><span id='value-stat-1'></span></div>
   <div><label for='stat-2'>Si</label><input type='range' min='10' max='90' value='30' id='stat-2'><span id='value-stat-2'></span></div>
   <div><label for='stat-3'>Ne</label><input type='range' min='10' max='90' value='30' id='stat-3'><span id='value-stat-3'></span></div>
@@ -119,12 +128,13 @@
   <div><label for='stat-6'>Ti</label><input type='range' min='10' max='90' value='30' id='stat-6'><span id='value-stat-6'></span></div>
   <div><label for='stat-7'>Fe</label><input type='range' min='10' max='90' value='30' id='stat-7'><span id='value-stat-7'></span></div>
   <div><label for='stat-8'>Fi</label><input type='range' min='10' max='90' value='30' id='stat-8'><span id='value-stat-8'></span></div>
-  <button id='btn-new-profile'>Create</button>
+  合计点数：<span id='profile-stat-sum'></span> / 480 <button id='btn-stats-random'>🎲 roll</button><br>
+  <button id='btn-new-profile'>创建</button>
 </details>
 </div>
 <br>
 <div id='seat-start' class='hidden'>
-  <button id='btn-start'>Start!</button>
+  <button id='btn-start'>开始游戏！</button>
 </div>
 </div>
 
@@ -155,19 +165,20 @@
 </style>
 
 <div id='appointment-panel' class='hidden'>
-<h3>Appointment phase</h3>
+<h3>抽取起始玩家</h3>
 <div id='appointment-wait' class='hidden'>
-  Please wait
+  请等待其他玩家选择
 </div>
 <div id='appointment-ask' class='hidden'>
-  Play first?<br>
-  <button id='btn-appointment-accept'>Yes</button><br>
-  <button id='btn-appointment-pass'>No</button><br>
+  要作为起始玩家开始游戏吗？<br>
+  <button id='btn-appointment-accept'>接受</button><br>
+  <button id='btn-appointment-pass'>跳过</button><br>
 </div>
 </div>
 
 <div id='gameplay-panel' class='hidden'>
-<h3>Gameplay phase</h3>
+<!-- <h3>故事展开阶段</h3> -->
+<br>
 
 <style>
   #gameplay-interactions:not(.active) {
@@ -181,6 +192,9 @@
   #gameplay-interactions h4 {
     margin: 1ex 0;
   }
+  #gameplay-interactions table td:nth-child(1) {
+    padding-right: 0.3em;
+  }
   #gameplay-interactions table td:nth-child(2) {
     padding-left: 0.6em;
     border-left: 1px solid #aaa;
@@ -188,17 +202,17 @@
 </style>
 <div id='gameplay-interactions'>
   <div id='gameplay-arena'>
-    <h4>Arena keywords</h4>
+    <h4>场上关键词</h4>
     <div id='gameplay-arena-list'></div>
   </div>
   <table><tr><td>
     <div id='gameplay-hand'>
-      <h4>Hand</h4>
+      <h4>行动手牌</h4>
       <div id='gameplay-hand-list'></div>
     </div>
   </td><td>
     <div id='gameplay-target'>
-      <h4>Target</h4>
+      <h4>行动对象</h4>
       <div id='gameplay-target-list'></div>
     </div>
   </td></tr></table>
@@ -206,16 +220,16 @@
 
 <br>
 <div id='storytelling-end'>
-  <strong>🗣️🎙️ Narrating!</strong>
-  <button id='btn-storytelling-end'>End</button>
+  <strong>🗣️🎙️ 叙述中</strong> —
+  行动：【<strong><span id='storytelling-action'></span></strong>】，关键词：【<strong><span id='storytelling-keyword'></span></strong>】
   <br>
-  Action: <strong><span id='storytelling-action'></span></strong>, keyword: <strong><span id='storytelling-keyword'></span></strong>
+  <button id='btn-storytelling-end'>结束</button>
 </div>
 
 <br>
 <div id='queue'>
-  <strong>Queue:</strong> <span id='queue-list'></span>
-  <button id='btn-queue-join'>+ join</button>
+  <strong>本轮排队：</strong> <span id='queue-list'></span>
+  <button id='btn-queue-join'>+ 举手加入</button>
 </div>
 <br>
 

@@ -137,9 +137,9 @@ const updatePlayers = (playerProfiles) => {
     node.id = `player-id-${i}`
     node.innerHTML =
       (pf.creator.id === uid ? '<strong>' : '') +
-      (pf.id === null ? '[not seated]' : `[${+i + 1}]`) +
+      (pf.id === null ? '[未入座]' : `[${+i + 1}]`) +
       ` ${htmlEscape(pf.creator.nickname)}` +
-      (pf.creator.id === uid ? ' 👋</strong>' : '') +
+      (pf.creator.id === uid ? ' (👋 自己)</strong>' : '') +
       (pf.id === null ? '' : ` — ${htmlEscape(pf.details.race)}; ${formatStats(pf.stats)}`)
     elContainer.appendChild(node)
 
@@ -208,7 +208,7 @@ const timerSet = (seconds) => {
 
 ////// Assembly panel //////
 
-const profileRepr = (pf, omitId) => `${omitId ? '' : `[${pf.id}]: `}race <strong>${htmlEscape(pf.details.race)}</strong>, descr "<strong>${htmlEscape(pf.details.description)}</strong>", ${formatStats(pf.stats)}`
+const profileRepr = (pf, omitId) => `${omitId ? '' : `[${pf.id}]: `}种族 <strong>${htmlEscape(pf.details.race)}</strong>，背景 "<strong>${htmlEscape(pf.details.description)}</strong>", ${formatStats(pf.stats)}`
 
 const showAssemblyPanel = () => {
   document.getElementById('assembly-panel').classList.remove('hidden')
@@ -251,7 +251,7 @@ if (room.creator.id === uid) {
 const addProfileButton = (pf) => {
   const elContainer = document.getElementById('profiles')
   const node = document.createElement('button')
-  node.innerHTML = `Seat with profile [${pf.id}]`
+  node.innerHTML = `角色档案 [${pf.id}]`
   node.addEventListener('click', (e) => {
     send({
       type: 'seat',
@@ -269,14 +269,47 @@ const addProfileButton = (pf) => {
 const profiles = await (await fetch(`${api}/profile/my`, { credentials: 'include' })).json()
 for (const pf of profiles) addProfileButton(pf)
 
+const updateSum = () => {
+  const sum = [1, 2, 3, 4, 5, 6, 7, 8]
+    .map((i) => +document.getElementById(`stat-${i}`).value)
+    .reduce((a, b) => a + b)
+  document.getElementById('profile-stat-sum').innerText = sum
+  document.getElementById('btn-new-profile').disabled = (sum > 480)
+}
 for (let i = 1; i <= 8; i++) {
   const el = document.getElementById(`stat-${i}`)
   const elValue = document.getElementById(`value-stat-${i}`)
   el.addEventListener('input', (e) => {
     elValue.innerText = el.value
+    updateSum()
   })
   elValue.innerText = el.value
 }
+updateSum()
+
+document.getElementById('btn-stats-random').addEventListener('click', (e) => {
+  const values = []
+
+  do {
+    // Sample 7 unique elements in [0, 407)
+    const samples = new Set()
+    for (let i = 400; i < 407; i++) {
+      let x = Math.floor(Math.random() * (i + 1))
+      if (samples.has(x)) x = i
+      samples.add(x)
+    }
+    const sorted = [-1, 407, ...samples.values()].sort((a, b) => a - b)
+    for (let i = 0; i < 8; i++)
+      values[i] = sorted[i + 1] - sorted[i] - 1 + 10
+  } while (!values.every((n) => n <= 80))
+
+  for (let i = 1; i <= 8; i++) {
+    document.getElementById(`stat-${i}`).value = values[i - 1]
+    document.getElementById(`value-stat-${i}`).innerText = values[i - 1]
+  }
+  updateSum()
+})
+
 document.getElementById('btn-new-profile').addEventListener('click', async (e) => {
   const resp = await (await fetch(`${api}/profile/create`, {
     credentials: 'include',
@@ -444,7 +477,7 @@ const updateGameplayPanel = (gameplay_status) => {
     elTarget.appendChild(document.createElement('br'))
   }
   const node = document.createElement('button')
-  node.innerText = 'No target'
+  node.innerText = '无特定对象'
   elTarget.appendChild(node)
   node.addEventListener('click', (e) => {
     selTarget = -1
