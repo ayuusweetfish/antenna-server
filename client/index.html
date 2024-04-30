@@ -54,6 +54,11 @@
 </style>
 
 <h3>Assembly phase</h3>
+<div id='seat-withdraw' class='hidden'>
+  Seated with profile <strong><span id='seated-profile'></span></strong>
+  <button id='btn-seat-withdraw'>Leave seat</button>
+</div>
+<div id='seat-profiles' class='hidden'>
 <div id='profiles'></div>
 <details>
   <summary>New profile</summary>
@@ -69,6 +74,8 @@
   <div><label for='stat-8'>Fi</label><input type='range' min='10' max='90' value='30' id='stat-8'><span id='value-stat-8'></span></div>
   <button id='btn-new-profile'>Create</button>
 </details>
+</div>
+</div>
 </div>
 
 <div id='gameplay-panel' class='hidden'>

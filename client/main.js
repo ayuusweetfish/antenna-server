@@ -62,10 +62,12 @@ const reconnect = () => {
         content: `房间【${o.room.title}】：${o.room.description}`
       }])
       if (o.phase === 'assembly') {
-        showAssemblyPanel()
+        updateAssemblyPanel(o.players)
       } else if (o.phase === 'appointment') {
       } else if (o.phase === 'gameplay') {
       }
+    } else if (o.type === 'assembly_update') {
+      updateAssemblyPanel(o.players)
     }
   }
 }
@@ -92,14 +94,34 @@ const processLogs = (logs) => {
   }
 }
 
+const profileRepr = (pf) => `[${pf.id}]: race ${pf.details.race}, desc ${pf.details.description}, stats ${pf.stats.join(', ')}`
+
 const showAssemblyPanel = () => {
   document.getElementById('assembly-panel').classList.remove('hidden')
   document.getElementById('gameplay-panel').classList.add('hidden')
 }
+const showSeatAndProfiles = () => {
+  document.getElementById('seat-profiles').classList.remove('hidden')
+  document.getElementById('seat-withdraw').classList.add('hidden')
+}
+const showSeatWithdraw = (p) => {
+  document.getElementById('seat-profiles').classList.add('hidden')
+  document.getElementById('seat-withdraw').classList.remove('hidden')
+  document.getElementById('seated-profile').innerText = profileRepr(p)
+}
+const updateAssemblyPanel = (players) => {
+  showAssemblyPanel()
+  const p = players.find((p) => p.creator.id === uid && p.id !== null)
+  if (p)
+    showSeatWithdraw(p)
+  else
+    showSeatAndProfiles()
+}
+
 const addProfileButton = (pf) => {
   const elContainer = document.getElementById('profiles')
   const node = document.createElement('button')
-  node.innerText = `Seat with profile [${pf.id}]: race ${pf.details.race}, desc ${pf.details.description}, stats ${pf.stats.join(', ')}`
+  node.innerText = `Seat with profile ${profileRepr(pf)}`
   node.addEventListener('click', (e) => {
     send({
       type: 'seat',
@@ -135,6 +157,12 @@ document.getElementById('btn-new-profile').addEventListener('click', async (e) =
     }),
   })).json()
   addProfileButton(resp)
+})
+
+document.getElementById('btn-seat-withdraw').addEventListener('click', (e) => {
+  send({
+    type: 'withdraw',
+  })
 })
 
 })()
