@@ -571,7 +571,7 @@ func ServerListen() {
 	port := Config.Port
 	log.Printf("Listening on http://localhost:%d/\n", port)
 	if Config.Debug {
-		log.Printf("Visit http://localhost:%d/play to play")
+		log.Printf("Visit http://localhost:%d/play to play", port)
 		log.Printf("Visit http://localhost:%d/debug/pprof/ for profiling stats\n", port)
 	}
 	server := &http.Server{
