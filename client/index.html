@@ -98,6 +98,9 @@ h3 {
 .invisible {
   visibility: hidden;
 }
+.inline-block {
+  display: inline-block;
+}
 </style>
 
 <div id='assembly-panel' class='hidden'>
@@ -233,6 +236,15 @@ h3 {
 </div>
 <br>
 
+</div>
+
+<div id='game-end-panel' class='hidden'>
+<h4>游戏结束</h4>
+<div id='game-end-relationships'></div>
+<br>
+<div>本局获得成长点数：<strong><span id='game-end-growth'></span></strong></div>
+<br>
+<button id='btn-game-end-return'>返回房间</button>
 </div>
 
 <script src='main.js'></script>

@@ -85,7 +85,7 @@ const reconnect = () => {
     } else if (o.type === 'gameplay_progress') {
       updateGameplayPanel(o.gameplay_status)
     } else if (o.type === 'game_end') {
-      showGameEndPanel()
+      updateGameEndPanel(o)
     }
   }
 }
@@ -159,7 +159,7 @@ const formatStats = (stats) =>
 const formatCogFns = (fns) =>
   fns.map((i) => `<span class='cog-fn-${cogFn[i]}'>${cogFn[i]}</span>`).join(' ')
 const formatRelationship = (rel, plus) =>
-  rel.map((n, i) => `<span class='rel-aspect-${i}'>${relAspect[i]} <strong>${plus && n > 0 ? '+' : ''}${n}</strong></span>`).join(' ')
+  `<span class='inline-block'>` + rel.map((n, i) => `<span class='rel-aspect-${i}'>${relAspect[i]} <strong>${plus && n > 0 ? '+' : ''}${n}</strong></span>`).join(' ') + `</span>`
 
 const markPlayer = (index, storytellerIndex) => {
   const elContainer = document.getElementById('players')
@@ -214,6 +214,7 @@ const showAssemblyPanel = () => {
   document.getElementById('assembly-panel').classList.remove('hidden')
   document.getElementById('appointment-panel').classList.add('hidden')
   document.getElementById('gameplay-panel').classList.add('hidden')
+  document.getElementById('game-end-panel').classList.add('hidden')
   document.getElementById('players').classList.add('assembly')
   document.getElementById('progress-indicator').classList.add('hidden')
 }
@@ -340,6 +341,7 @@ const showAppointmentPanel = () => {
   document.getElementById('assembly-panel').classList.add('hidden')
   document.getElementById('appointment-panel').classList.remove('hidden')
   document.getElementById('gameplay-panel').classList.add('hidden')
+  document.getElementById('game-end-panel').classList.add('hidden')
   document.getElementById('players').classList.remove('assembly')
   document.getElementById('progress-indicator').classList.add('hidden')
 }
@@ -369,6 +371,7 @@ const showGameplayPanel = () => {
   document.getElementById('assembly-panel').classList.add('hidden')
   document.getElementById('appointment-panel').classList.add('hidden')
   document.getElementById('gameplay-panel').classList.remove('hidden')
+  document.getElementById('game-end-panel').classList.add('hidden')
   document.getElementById('players').classList.remove('assembly')
   document.getElementById('progress-indicator').classList.remove('hidden')
 }
@@ -513,10 +516,38 @@ document.getElementById('btn-queue-join').addEventListener('click', (e) => {
 ////// Game end panel //////
 
 const showGameEndPanel = () => {
+  document.getElementById('assembly-panel').classList.add('hidden')
+  document.getElementById('appointment-panel').classList.add('hidden')
+  document.getElementById('gameplay-panel').classList.add('hidden')
+  document.getElementById('game-end-panel').classList.remove('hidden')
+  document.getElementById('players').classList.remove('assembly')
+  document.getElementById('progress-indicator').classList.add('hidden')
+
   markPlayer(-1)
   document.getElementById('storytelling-end').classList.add('hidden')
   timerSet(null)
 }
+
+const updateGameEndPanel = (o) => {
+  showGameEndPanel()
+
+  const elRelsContainer = document.getElementById('game-end-relationships')
+  elRelsContainer.innerText = ''
+
+  for (const [i, pf] of Object.entries(lastSavedPlayers)) {
+    if (+i === myIndex) continue
+    const node = document.createElement('span')
+    node.innerHTML = `[${+i + 1}] ${pf.creator.nickname} — ${formatRelationship(o.relationship[+i])}`
+    elRelsContainer.appendChild(node)
+    elRelsContainer.appendChild(document.createElement('br'))
+  }
+
+  document.getElementById('game-end-growth').innerText = o.growth_points
+}
+
+document.getElementById('btn-game-end-return').addEventListener('click', (e) => {
+  showAssemblyPanel()
+})
 
 // Connect after everything has been initialized;
 // otherwise might receive `ReferenceError: can't access lexical declaration before initialization`
