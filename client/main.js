@@ -424,6 +424,11 @@ document.getElementById('btn-queue-join').addEventListener('click', (e) => {
   send({ type: 'queue' })
 })
 
+document.getElementById('btn-comment').addEventListener('click', (e) => {
+  send({ type: 'comment', text: document.getElementById('txt-comment').value })
+  document.getElementById('txt-comment').value = ''
+})
+
 ////// Game end panel //////
 
 const showGameEndPanel = () => {
