@@ -171,6 +171,7 @@ const showAssemblyPanel = () => {
   document.getElementById('appointment-panel').classList.add('hidden')
   document.getElementById('gameplay-panel').classList.add('hidden')
   document.getElementById('players').classList.add('assembly')
+  document.getElementById('progress-indicator').classList.add('hidden')
 }
 const showSeatAndProfiles = () => {
   document.getElementById('seat-profiles').classList.remove('hidden')
@@ -261,6 +262,7 @@ const showAppointmentPanel = () => {
   document.getElementById('appointment-panel').classList.remove('hidden')
   document.getElementById('gameplay-panel').classList.add('hidden')
   document.getElementById('players').classList.remove('assembly')
+  document.getElementById('progress-indicator').classList.add('hidden')
 }
 const updateAppointmentPanel = (status) => {
   showAppointmentPanel()
@@ -288,6 +290,7 @@ const showGameplayPanel = () => {
   document.getElementById('appointment-panel').classList.add('hidden')
   document.getElementById('gameplay-panel').classList.remove('hidden')
   document.getElementById('players').classList.remove('assembly')
+  document.getElementById('progress-indicator').classList.remove('hidden')
 }
 
 let arenaBtns, handBtns, targetBtns
@@ -323,6 +326,9 @@ const updateGameplayIxnBtnsAndCheckAct = () => {
 
 const updateGameplayPanel = (gameplay_status) => {
   showGameplayPanel()
+  document.getElementById('act-num').innerText = gameplay_status.act_count
+  document.getElementById('round-num').innerText = gameplay_status.round_count
+
   let storyteller = undefined
   if (gameplay_status.step === 'storytelling_holder')
     storyteller = gameplay_status.holder
@@ -402,13 +408,23 @@ const updateGameplayPanel = (gameplay_status) => {
   if (storyteller === myIndex)
     document.getElementById('storytelling-end').classList.remove('hidden')
   else document.getElementById('storytelling-end').classList.add('hidden')
+
+  document.getElementById('queue-list').innerText =
+    gameplay_status.queue.map((i) => `[${i + 1}] ${lastSavedPlayers[i].creator.nickname}`).join(', ')
+  document.getElementById('btn-queue-join').disabled =
+    !(gameplay_status.action_points > 0 && gameplay_status.holder !== myIndex
+      && gameplay_status.queue.indexOf(myIndex) === -1)
 }
 
 document.getElementById('btn-storytelling-end').addEventListener('click', (e) => {
   send({ type: 'storytelling_end' })
 })
 
-////// Gameplay panel //////
+document.getElementById('btn-queue-join').addEventListener('click', (e) => {
+  send({ type: 'queue' })
+})
+
+////// Game end panel //////
 
 const showGameEndPanel = () => {
   markPlayer(-1)

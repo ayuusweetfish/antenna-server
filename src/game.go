@@ -862,6 +862,9 @@ func (s *GameplayState) Queue(userId int) string {
 	if st.Player[playerIndex].ActionPoints == 0 {
 		return "No action points remaining"
 	}
+	if playerIndex == st.Holder {
+		return "Already move holder"
+	}
 	for i, p := range st.Queue {
 		if p == playerIndex {
 			return fmt.Sprintf("Already in queue (position %d)", i)
