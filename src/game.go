@@ -971,13 +971,15 @@ func (r *GameRoom) BroadcastRoomState() {
 	}
 }
 
-func (r *GameRoom) BroadcastAssemblyUpdate() {
+func (r *GameRoom) BroadcastAssemblyUpdate(skipUserId int) {
 	message := OrderedKeysMarshal{
 		{"type", "assembly_update"},
 		{"players", r.Gameplay.PlayerReprs(r)},
 	}
-	for _, conn := range r.Conns {
-		conn.OutChannel <- message
+	for userId, conn := range r.Conns {
+		if userId != skipUserId {
+			conn.OutChannel <- message
+		}
 	}
 }
 
@@ -1100,14 +1102,14 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if err != "" {
 			panic(err)
 		}
-		r.BroadcastAssemblyUpdate()
+		r.BroadcastAssemblyUpdate(-1)
 		r.BroadcastLog(logContent)
 	} else if message["type"] == "withdraw" {
 		err, logContent := r.Gameplay.WithdrawSeat(msg.UserId)
 		if err != "" {
 			panic(err)
 		}
-		r.BroadcastAssemblyUpdate()
+		r.BroadcastAssemblyUpdate(-1)
 		r.BroadcastLog(logContent)
 	} else if message["type"] == "start" {
 		if msg.UserId != r.Room.Creator {
@@ -1249,6 +1251,7 @@ loop:
 				conn := r.Conns[sigNewConn.UserId]
 				stateMessage := r.StateMessage(sigNewConn.UserId)
 				logMessage := r.LogMessage(0)
+				r.BroadcastAssemblyUpdate(sigNewConn.UserId)
 				r.Mutex.RUnlock()
 				conn.OutChannel <- stateMessage
 				conn.OutChannel <- logMessage
@@ -1262,6 +1265,7 @@ loop:
 						timeoutTimer.Reset(timeoutDur)
 					}
 				}
+				r.BroadcastAssemblyUpdate(sigLostConn.UserId)
 				r.Mutex.Unlock()
 			}
 			if sigTimer, ok := sig.(GameRoomSignalTimer); ok {

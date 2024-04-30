@@ -13,7 +13,7 @@ const search = new URL(document.location).searchParams
 const uid = +(search.get('uid') || prompt('User ID'))
 const rid = +(search.get('room') || prompt('Room ID'))
 document.cookie = `auth=!${uid}; SameSite=Lax; Path=/; Max-Age=604800`
-window.history.replaceState(null, null, `?uid=${uid}&room=${rid}`)
+window.history.replaceState(null, null, `?room=${rid}&uid=${uid}`)
 
 const user = await (await fetch(`${api}/me`, { credentials: 'include' })).json()
 const room = await (await fetch(`${api}/room/${rid}`, { credentials: 'include' })).json()
@@ -61,12 +61,14 @@ const reconnect = () => {
         timestamp: Math.floor(Date.now() / 1000),
         content: `房间【${o.room.title}】：${o.room.description}`
       }])
+      updatePlayers(o.players)
       if (o.phase === 'assembly') {
         updateAssemblyPanel(o.players)
       } else if (o.phase === 'appointment') {
       } else if (o.phase === 'gameplay') {
       }
     } else if (o.type === 'assembly_update') {
+      updatePlayers(o.players)
       updateAssemblyPanel(o.players)
     }
   }
@@ -90,6 +92,20 @@ const processLogs = (logs) => {
     const node = document.createElement('p')
     node.id = id
     node.innerHTML = `<span class='timestamp'>${(new Date(l.timestamp * 1000)).toISOString().substring(11, 19)}</span> ${htmlEscape(l.content)}`
+    elContainer.appendChild(node)
+  }
+}
+
+const updatePlayers = (playerProfiles) => {
+  const elContainer = document.getElementById('players')
+  elContainer.innerHTML = ''
+  for (const [i, pf] of Object.entries(playerProfiles)) {
+    const node = document.createElement('p')
+    node.id = `player-id-${pf.creator.id}`
+    node.innerText =
+      (pf.id === null ? '[not seated]' : `[${i + 1}]`) +
+      ` ${pf.creator.nickname}` +
+      (pf.id === null ? '' : ` (${pf.details.race}; ${pf.stats.join(',')})`)
     elContainer.appendChild(node)
   }
 }
