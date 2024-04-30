@@ -512,7 +512,8 @@ func (h *errCaptureHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // A handler that allows all cross-origin requests
 type corsAllowAllHandler struct {
-	Handler http.Handler
+	Handler      http.Handler
+	StaticServer http.Handler
 }
 
 func (h *corsAllowAllHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -523,6 +524,8 @@ func (h *corsAllowAllHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if r.Method == "OPTIONS" {
 		// Intercept OPTIONS requests
 		w.Write([]byte{})
+	} else if strings.HasPrefix(r.URL.Path, "/play/") {
+		h.StaticServer.ServeHTTP(w, r)
 	} else {
 		h.Handler.ServeHTTP(w, r)
 	}
@@ -557,12 +560,18 @@ func ServerListen() {
 		mux.HandleFunc("GET /test/{room_id}/{player_id}", testHandler)
 		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
 		mux.HandleFunc("GET /data", dataInspectionHandler)
-		handler = &corsAllowAllHandler{Handler: handler}
+		staticHandler := http.StripPrefix("/play",
+			http.FileServer(http.Dir("../client")))
+		handler = &corsAllowAllHandler{
+			Handler:      handler,
+			StaticServer: staticHandler,
+		}
 	}
 
 	port := Config.Port
 	log.Printf("Listening on http://localhost:%d/\n", port)
 	if Config.Debug {
+		log.Printf("Visit http://localhost:%d/play to play")
 		log.Printf("Visit http://localhost:%d/debug/pprof/ for profiling stats\n", port)
 	}
 	server := &http.Server{

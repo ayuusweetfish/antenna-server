@@ -1,6 +1,8 @@
 (async () => {
 
-const api = 'http://localhost:10405'
+const api = (document.location.host.indexOf('localhost') !== -1 ?
+  'http://localhost:10405' :
+  document.location.origin)
 const apiUrl = new URL(api)
 const form = (dict) => {
   const d = new URLSearchParams()
