@@ -9,9 +9,9 @@
 </head><body>
 
 <div>
-  User ID: <span id='uid'></span> — Nickname: <strong><span id='nickname'></span></strong> — || —
+  User ID: <span id='uid'></span> — Nickname: <strong><span id='nickname'></span></strong> 　 · 　
   Room ID: <span id='rid'></span> — Title: <strong><span id='room-title'></span></strong> — [<strong><span id='room-tags'></span></strong>] — by <strong><span id='room-creator'></span></strong>
-  <span id='progress-indicator' class='hidden'>— || — Act <strong><span id='act-num'></span></strong>, Round <strong><span id='round-num'></span></strong></span>
+  <span id='progress-indicator' class='hidden'>　 · 　 Act <strong><span id='act-num'></span></strong>, Round <strong><span id='round-num'></span></strong></span>
 </div>
 <div>
   <style>
@@ -74,11 +74,15 @@
   <h3>Players</h3>
   <div id='players'>
   </div>
+  <div id='timer'>⏱️ <strong><span id='timer-display'></span></strong></div>
 </div>
 
 <style>
 .hidden {
   display: none;
+}
+.invisible {
+  visibility: hidden;
 }
 </style>
 

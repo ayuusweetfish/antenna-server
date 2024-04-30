@@ -77,9 +77,9 @@ const reconnect = () => {
       updatePlayers(o.players)
       updateAssemblyPanel(o.players)
     } else if (o.type === 'start') {
-      updateAppointmentPanel({ holder: o.holder, timer: 60 })
+      updateAppointmentPanel({ holder: o.holder, timer: 30 })
     } else if (o.type === 'appointment_pass') {
-      updateAppointmentPanel({ holder: o.next_holder, timer: 60 })
+      updateAppointmentPanel({ holder: o.next_holder, timer: 30 })
     } else if (o.type === 'appointment_accept') {
       updateGameplayPanel(o.gameplay_status)
     } else if (o.type === 'gameplay_progress') {
@@ -162,6 +162,38 @@ const markPlayer = (index, storytellerIndex) => {
   }
 }
 
+// Timer
+const elTimerContainer = document.getElementById('timer')
+const elTimerDisplay = document.getElementById('timer-display')
+let timerExpiresAt
+let intervalId
+
+const updateTimerDisplay = () => {
+  if (timerExpiresAt === undefined) return
+  const remaining = timerExpiresAt - Date.now()
+  elTimerDisplay.innerText = Math.round(remaining / 1000)
+  if (remaining < 0) {
+    clearInterval(intervalId)
+    intervalId = undefined
+  }
+}
+const timerSet = (seconds) => {
+  if (intervalId !== undefined) clearInterval(intervalId)
+  intervalId = undefined
+  if (seconds === null) {
+    elTimerContainer.classList.add('invisible')
+    timerExpiresAt = undefined
+  } else {
+    elTimerContainer.classList.remove('invisible')
+    timerExpiresAt = Date.now() + seconds * 1000
+    updateTimerDisplay()
+    setTimeout(() => {
+      updateTimerDisplay()
+      intervalId = setInterval(updateTimerDisplay, 1000)
+    }, (seconds % 1) * 1000)
+  }
+}
+
 ////// Assembly panel //////
 
 const profileRepr = (pf, omitId) => `${omitId ? '' : `[${pf.id}]: `}race <strong>${htmlEscape(pf.details.race)}</strong>, descr "<strong>${htmlEscape(pf.details.description)}</strong>", ${formatStats(pf.stats)}`
@@ -194,6 +226,8 @@ const updateAssemblyPanel = (players) => {
     document.getElementById('btn-start').disabled =
       players.length <= 1 || players.some((p) => p.id === null);
   }
+
+  timerSet(null)
 }
 if (room.creator.id === uid) {
   document.getElementById('seat-start').classList.remove('hidden')
@@ -274,6 +308,7 @@ const updateAppointmentPanel = (status) => {
     document.getElementById('appointment-wait').classList.remove('hidden')
     document.getElementById('appointment-ask').classList.add('hidden')
   }
+  timerSet(status.timer)
 }
 
 document.getElementById('btn-appointment-accept').addEventListener('click', (e) => {
@@ -414,6 +449,8 @@ const updateGameplayPanel = (gameplay_status) => {
   document.getElementById('btn-queue-join').disabled =
     !(gameplay_status.action_points > 0 && gameplay_status.holder !== myIndex
       && gameplay_status.queue.indexOf(myIndex) === -1)
+
+  timerSet(gameplay_status.timer)
 }
 
 document.getElementById('btn-storytelling-end').addEventListener('click', (e) => {
@@ -434,6 +471,7 @@ document.getElementById('btn-comment').addEventListener('click', (e) => {
 const showGameEndPanel = () => {
   markPlayer(-1)
   document.getElementById('storytelling-end').classList.add('hidden')
+  timerSet(null)
 }
 
 // Connect after everything has been initialized;
