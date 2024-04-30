@@ -273,6 +273,7 @@ type GameplayPhaseStatusGameplayPlayer struct {
 	Relationship [][3]float32
 	ActionPoints int
 	Hand         []string
+	GrowthPoints int
 }
 type GameplayPhaseStatusGameplay struct {
 	ActCount   int
@@ -333,6 +334,7 @@ func GameplayPhaseStatusGameplayNew(n int, holder int, f func()) GameplayPhaseSt
 			Relationship: make([][3]float32, n),
 			ActionPoints: 1,
 			Hand:         fillCards(nil, 5),
+			GrowthPoints: 0,
 		})
 	}
 
@@ -680,6 +682,15 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 		st.TargetDifficulty = -1
 		st.TargetResult = 0
 	}
+
+	// Growth points
+	var growth int
+	if st.HolderResult > 0 {
+		growth = card.Growth
+	} else {
+		growth = 1
+	}
+	st.Player[playerIndex].GrowthPoints += growth
 
 	st.Timer.Reset(TimeLimitStorytelling)
 
@@ -1036,6 +1047,7 @@ func (r *GameRoom) BroadcastGameEnd() {
 		conn.OutChannel <- OrderedKeysMarshal{
 			{"type", "game_end"},
 			{"relationship", st.Player[r.Gameplay.PlayerIndex(userId)].Relationship},
+			{"growth_points", st.Player[r.Gameplay.PlayerIndex(userId)].GrowthPoints},
 		}
 	}
 }
