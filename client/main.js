@@ -67,6 +67,7 @@ const reconnect = () => {
       } else if (o.phase === 'appointment') {
         updateAppointmentPanel(o.appointment_status)
       } else if (o.phase === 'gameplay') {
+        updateGameplayPanel(o.gameplay_status)
       }
     } else if (o.type === 'assembly_update') {
       updatePlayers(o.players)
@@ -76,6 +77,8 @@ const reconnect = () => {
     } else if (o.type === 'appointment_pass') {
       updateAppointmentPanel({ holder: o.next_holder, timer: 60 })
     } else if (o.type === 'appointment_accept') {
+      updateGameplayPanel(o.gameplay_status)
+    } else if (o.type === 'gameplay_progress') {
       updateGameplayPanel(o.gameplay_status)
     }
   }
@@ -120,20 +123,23 @@ const updatePlayers = (playerProfiles) => {
     marker.id = `player-marker-${i}`
     marker.innerText = '⬤'
     marker.classList.add('player-marker')
-    marker.classList.add('invisible')
     node.prepend(marker)
 
     if (pf.creator.id === uid) myIndex = +i
   }
 }
 
-const markPlayer = (index) => {
+const markPlayer = (index, storytellerIndex) => {
   const elContainer = document.getElementById('players')
   for (const node of elContainer.children) {
     const i = +node.id.substring('player-id-'.length)
     const marker = document.getElementById(`player-marker-${i}`)
-    if (i === index) marker.classList.remove('invisible')
-    else marker.classList.add('invisible')
+
+    if (i === index) marker.classList.add('active')
+    else marker.classList.remove('active')
+
+    if (i === storytellerIndex) marker.classList.add('storyteller')
+    else marker.classList.remove('storyteller')
   }
 }
 
@@ -254,6 +260,32 @@ const showGameplayPanel = () => {
 }
 const updateGameplayPanel = (gameplay_status) => {
   showGameplayPanel()
+  let storyteller = undefined
+  if (gameplay_status.step === 'storytelling_holder')
+    storyteller = gameplay_status.holder
+  else if (gameplay_status.step === 'storytelling_target')
+    storyteller = gameplay_status.target
+  markPlayer(gameplay_status.holder, storyteller)
+
+  const elIxnContainer = document.getElementById('gameplay-interactions')
+  if (gameplay_status.holder === myIndex)
+    elIxnContainer.classList.add('active')
+  else elIxnContainer.classList.remove('active')
+
+  const elArena = document.getElementById('gameplay-arena-list')
+  elArena.innerText = ''
+  for (const kw of gameplay_status.arena) {
+    const node = document.createElement('button')
+    node.innerText = kw
+    elArena.appendChild(node)
+  }
+
+  const elHand = document.getElementById('gameplay-hand-list')
+  for (const card of gameplay_status.hand) {
+    const node = document.createElement('button')
+    node.innerText = card
+    elHand.appendChild(node)
+  }
 }
 
 // Connect after everything has been initialized;

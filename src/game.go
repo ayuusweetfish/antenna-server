@@ -723,7 +723,7 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	logContent := ""
 	if target == -1 {
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n难度判定为 %d，结果为【%s】\n轮到玩家【%s】讲述",
+			"座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
 			playerIndex+1, s.Players[playerIndex].User.Nickname,
 			st.Action, keyword,
 			st.HolderDifficulty, resultString(st.HolderResult),
@@ -731,7 +731,7 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 		)
 	} else {
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】对座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n主动方难度判定为 %d，结果为【%s】\n被动方难度判定为 %d，结果为【%s】\n轮到玩家【%s】讲述",
+			"座位 %d 玩家【%s】对座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n主动方抽取难度为 %d，事件判定结果为【%s】\n被动方抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
 			playerIndex+1, s.Players[playerIndex].User.Nickname,
 			target+1, s.Players[target].User.Nickname,
 			st.Action, keyword,

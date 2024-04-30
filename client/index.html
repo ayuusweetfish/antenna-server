@@ -41,10 +41,22 @@
   margin: 0 0;
 }
 #players .player-marker {
-  color: #272;
-}
-#players .player-marker.invisible {
   visibility: hidden;
+  width: 3ex;
+  display: inline-block;
+  text-align: center;
+}
+#players .player-marker.active {
+  color: #272;
+  visibility: visible;
+}
+#players .player-marker.storyteller:not(.active) {
+  color: #dc2;
+  visibility: visible;
+}
+#players .player-marker.active.storyteller {
+  border-radius: 50%;
+  background: #dc2;
 }
 </style>
 <h3>Players</h3>
@@ -90,6 +102,7 @@
   <button id='btn-new-profile'>Create</button>
 </details>
 </div>
+<br>
 <div id='seat-start' class='hidden'>
   <button id='btn-start'>Start!</button>
 </div>
@@ -106,6 +119,24 @@
 
 <div id='gameplay-panel' class='hidden'>
 <h3>Gameplay phase</h3>
+
+<style>
+  #gameplay-interactions:not(.active) {
+    opacity: 50%;
+    pointer-events: none;
+  }
+</style>
+<div id='gameplay-interactions'>
+  <div id='gameplay-arena'>
+    <h4>Arena</h4>
+    <div id='gameplay-arena-list'></div>
+  </div>
+  <div id='gameplay-hand'>
+    <h4>Hand</h4>
+    <div id='gameplay-hand-list'></div>
+  </div>
+</div>
+
 </div>
 
 <script src='main.js'></script>
