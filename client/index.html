@@ -9,7 +9,7 @@
 </head><body>
 
 <div>
-  User ID: <span id='uid'></span> — Nickname: <strong><span id='nickname'></span></strong><br>
+  User ID: <span id='uid'></span> — Nickname: <strong><span id='nickname'></span></strong> — || —
   Room ID: <span id='rid'></span> — Title: <strong><span id='room-title'></span></strong> — [<strong><span id='room-tags'></span></strong>] — by <strong><span id='room-creator'></span></strong>
 </div>
 <div>
@@ -21,8 +21,12 @@
 </div>
 
 <style>
+#logs-container {
+  float: right;
+  width: 30%;
+}
 #log {
-  max-height: 20ex;
+  height: 30ex;
   overflow-y: scroll;
 }
 #log p {
@@ -32,11 +36,17 @@
   color: #aaa;
 }
 </style>
-<h3>Logs</h3>
-<div id='log'>
+<div id='logs-container'>
+  <h3>Logs</h3>
+  <div id='log'>
+  </div>
 </div>
 
 <style>
+#players.assembly {
+  height: 20ex;
+  overflow-y: scroll;
+}
 #players p {
   margin: 0 0;
 }
@@ -59,8 +69,10 @@
   background: #dc2;
 }
 </style>
-<h3>Players</h3>
-<div id='players'>
+<div id='players-container'>
+  <h3>Players</h3>
+  <div id='players'>
+  </div>
 </div>
 
 <style>
@@ -71,9 +83,6 @@
 
 <div id='assembly-panel' class='hidden'>
 <style>
-#assembly-panel button {
-  display: block;
-}
 #assembly-panel label {
   display: inline-block;
   width: 2em;
@@ -82,7 +91,8 @@
 
 <h3>Assembly phase</h3>
 <div id='seat-withdraw' class='hidden'>
-  Seated with profile <strong><span id='seated-profile'></span></strong>
+  Seated with profile <span id='seated-profile'></span>
+  <br>
   <button id='btn-seat-withdraw'>Leave seat</button>
 </div>
 <div id='seat-profiles' class='hidden'>
@@ -107,6 +117,27 @@
   <button id='btn-start'>Start!</button>
 </div>
 </div>
+
+<style>
+.rel-aspect-0 { color: #ff0c6d; }
+.rel-aspect-1 { color: #53ad5b; }
+.rel-aspect-2 { color: #3196fb; }
+.cog-fn-Se, .cog-fn-Si, .cog-fn-Ne, .cog-fn-Ni,
+.cog-fn-Te, .cog-fn-Ti, .cog-fn-Fe, .cog-fn-Fi {
+  display: inline-block;
+  color: white;
+  border-radius: 1ex;
+  padding: 0 0.4em;
+}
+.cog-fn-Se { background: #f58a03; }
+.cog-fn-Si { background: #496edf; }
+.cog-fn-Ne { background: #f5bf21; }
+.cog-fn-Ni { background: #ae56e0; }
+.cog-fn-Te { background: #c43d29; }
+.cog-fn-Ti { background: #3eaacc; }
+.cog-fn-Fe { background: #4aa114; }
+.cog-fn-Fi { background: #e44893; }
+</style>
 
 <div id='appointment-panel' class='hidden'>
 <h3>Appointment phase</h3>
@@ -135,7 +166,7 @@
 </style>
 <div id='gameplay-interactions'>
   <div id='gameplay-arena'>
-    <h4>Arena</h4>
+    <h4>Arena keywords</h4>
     <div id='gameplay-arena-list'></div>
   </div>
   <div id='gameplay-hand'>
@@ -150,6 +181,7 @@
 
 <br>
 <div id='storytelling-end'>
+  <h4>Please narrate your story now</h4>
   <button id='btn-storytelling-end'>End storytelling</button>
 </div>
 

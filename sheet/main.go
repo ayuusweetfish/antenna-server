@@ -105,7 +105,7 @@ func main() {
 	dict := pinyin.NewDict()
 	s := dict.Convert(`浪漫反应`, " ").ASCII()
 	fmt.Println(s)
-	return
+	// return
 
 	// Open file
 	f, err := excelize.OpenFile("1.xlsx")
@@ -132,6 +132,8 @@ func main() {
 			occurrenceRowIndex[card.Name] = i
 			fmt.Printf(`"%s": {[]int{%s}, %d, [3]int{%s}},`+"\n",
 				card.Name, commaSep(card.Condition), card.Growth, commaSep(card.RelationshipChange[:]))
+			// fmt.Printf(`"%s": [[%s], %d, [%s]],`+"\n",
+			// 	card.Name, commaSep(card.Condition), card.Growth, commaSep(card.RelationshipChange[:]))
 		} else {
 			fmt.Fprintf(os.Stderr, "Skipped row %d (%v)\n", i+1, err)
 		}

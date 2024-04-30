@@ -18,6 +18,10 @@ window.history.replaceState(null, null, `?room=${rid}&uid=${uid}`)
 const user = await (await fetch(`${api}/me`, { credentials: 'include' })).json()
 const room = await (await fetch(`${api}/room/${rid}`, { credentials: 'include' })).json()
 
+const cardSet = await (await fetch(`cards.json`)).json()
+const cogFn = ['Se', 'Si', 'Ne', 'Ni', 'Te', 'Ti', 'Fe', 'Fi']
+const relAspect = ['△激情', '○亲密', '□责任']
+
 document.getElementById('uid').innerText = uid
 document.getElementById('nickname').innerText = user.nickname
 
@@ -89,7 +93,8 @@ const reconnect = () => {
 const send = (o) => ws.send(JSON.stringify(o))
 
 const htmlEscape = (s) =>
-  s.replaceAll('&', '&amp;')
+  (s || '')
+   .replaceAll('&', '&amp;')
    .replaceAll('<', '&lt;')
    .replaceAll('>', '&gt;')
    .replaceAll('"', '&quot;')
@@ -104,8 +109,8 @@ const processLogs = (logs) => {
     node.id = id
     node.innerHTML = `<span class='timestamp'>${(new Date(l.timestamp * 1000)).toISOString().substring(11, 19)}</span> ${htmlEscape(l.content)}`
     elContainer.appendChild(node)
-    node.scrollIntoView()
   }
+  elContainer.scrollTo(0, elContainer.scrollHeight)
 }
 
 let lastSavedPlayers
@@ -119,10 +124,10 @@ const updatePlayers = (playerProfiles) => {
   for (const [i, pf] of Object.entries(playerProfiles)) {
     const node = document.createElement('p')
     node.id = `player-id-${i}`
-    node.innerText =
+    node.innerHTML =
       (pf.id === null ? '[not seated]' : `[${+i + 1}]`) +
-      ` ${pf.creator.nickname}` +
-      (pf.id === null ? '' : ` (${pf.details.race}; ${pf.stats.join(',')})`)
+      ` ${htmlEscape(pf.creator.nickname)}` +
+      (pf.id === null ? '' : ` (${htmlEscape(pf.details.race)}; ${formatStats(pf.stats)})`)
     elContainer.appendChild(node)
 
     const marker = document.createElement('span')
@@ -134,6 +139,14 @@ const updatePlayers = (playerProfiles) => {
     if (pf.creator.id === uid) myIndex = +i
   }
 }
+
+// const formatStats = (stats) => stats.map((n, i) => `${cogFn[i]}=${n}`).join(', ')
+const formatStats = (stats) =>
+  stats.map((n, i) => `<span class='cog-fn-${cogFn[i]}'>${cogFn[i]} <strong>${n}</strong></span>`).join(', ')
+const formatCogFns = (fns) =>
+  fns.map((i) => `<span class='cog-fn-${cogFn[i]}'>${cogFn[i]}</span>`).join(' ')
+const formatRelationship = (rel, plus) =>
+  rel.map((n, i) => `<span class='rel-aspect-${i}'>${relAspect[i]} <strong>${plus && n > 0 ? '+' : ''}${n}</strong></span>`).join(', ')
 
 const markPlayer = (index, storytellerIndex) => {
   const elContainer = document.getElementById('players')
@@ -151,12 +164,13 @@ const markPlayer = (index, storytellerIndex) => {
 
 ////// Assembly panel //////
 
-const profileRepr = (pf) => `[${pf.id}]: race ${pf.details.race}, desc ${pf.details.description}, stats ${pf.stats.join(', ')}`
+const profileRepr = (pf, omitId) => `${omitId ? '' : `[${pf.id}]: `}race <strong>${htmlEscape(pf.details.race)}</strong>, descr "<strong>${htmlEscape(pf.details.description)}</strong>", ${formatStats(pf.stats)}`
 
 const showAssemblyPanel = () => {
   document.getElementById('assembly-panel').classList.remove('hidden')
   document.getElementById('appointment-panel').classList.add('hidden')
   document.getElementById('gameplay-panel').classList.add('hidden')
+  document.getElementById('players').classList.add('assembly')
 }
 const showSeatAndProfiles = () => {
   document.getElementById('seat-profiles').classList.remove('hidden')
@@ -165,7 +179,7 @@ const showSeatAndProfiles = () => {
 const showSeatWithdraw = (p) => {
   document.getElementById('seat-profiles').classList.add('hidden')
   document.getElementById('seat-withdraw').classList.remove('hidden')
-  document.getElementById('seated-profile').innerText = profileRepr(p)
+  document.getElementById('seated-profile').innerHTML = profileRepr(p)
 }
 const updateAssemblyPanel = (players) => {
   showAssemblyPanel()
@@ -190,7 +204,7 @@ if (room.creator.id === uid) {
 const addProfileButton = (pf) => {
   const elContainer = document.getElementById('profiles')
   const node = document.createElement('button')
-  node.innerText = `Seat with profile ${profileRepr(pf)}`
+  node.innerHTML = `Seat with profile [${pf.id}]`
   node.addEventListener('click', (e) => {
     send({
       type: 'seat',
@@ -198,6 +212,12 @@ const addProfileButton = (pf) => {
     })
   })
   elContainer.appendChild(node)
+
+  const nodeDesc = document.createElement('span')
+  nodeDesc.innerHTML = ` — ${profileRepr(pf, true)}`
+  elContainer.appendChild(nodeDesc)
+
+  elContainer.appendChild(document.createElement('br'))
 }
 const profiles = await (await fetch(`${api}/profile/my`, { credentials: 'include' })).json()
 for (const pf of profiles) addProfileButton(pf)
@@ -240,6 +260,7 @@ const showAppointmentPanel = () => {
   document.getElementById('assembly-panel').classList.add('hidden')
   document.getElementById('appointment-panel').classList.remove('hidden')
   document.getElementById('gameplay-panel').classList.add('hidden')
+  document.getElementById('players').classList.remove('assembly')
 }
 const updateAppointmentPanel = (status) => {
   showAppointmentPanel()
@@ -266,6 +287,7 @@ const showGameplayPanel = () => {
   document.getElementById('assembly-panel').classList.add('hidden')
   document.getElementById('appointment-panel').classList.add('hidden')
   document.getElementById('gameplay-panel').classList.remove('hidden')
+  document.getElementById('players').classList.remove('assembly')
 }
 
 let arenaBtns, handBtns, targetBtns
@@ -339,6 +361,13 @@ const updateGameplayPanel = (gameplay_status) => {
       updateGameplayIxnBtnsAndCheckAct()
     })
     handBtns.push(node)
+
+    const [requirements, _, relationshipChanges] = cardSet[card]
+    const nodeDesc = document.createElement('span')
+    nodeDesc.innerHTML = ` — ${formatCogFns(requirements)} — ${formatRelationship(relationshipChanges, true)}`
+    elHand.appendChild(nodeDesc)
+
+    elHand.appendChild(document.createElement('br'))
   }
 
   const elTarget = document.getElementById('gameplay-target-list')
@@ -355,7 +384,9 @@ const updateGameplayPanel = (gameplay_status) => {
     })
     targetBtns[i] = node
 
-    elTarget.append(` — relationship with me: ${gameplay_status.relationship[+i].join(', ')}`)
+    const nodeDesc = document.createElement('span')
+    nodeDesc.innerHTML = ` — ${formatRelationship(gameplay_status.relationship[+i])}`
+    elTarget.appendChild(nodeDesc)
 
     elTarget.appendChild(document.createElement('br'))
   }
