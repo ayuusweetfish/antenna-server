@@ -73,6 +73,10 @@ const reconnect = () => {
       updateAssemblyPanel(o.players)
     } else if (o.type === 'start') {
       updateAppointmentPanel({ holder: o.holder, timer: 60 })
+    } else if (o.type === 'appointment_pass') {
+      updateAppointmentPanel({ holder: o.next_holder, timer: 60 })
+    } else if (o.type === 'appointment_accept') {
+      updateGameplayPanel(o.gameplay_status)
     }
   }
 }
@@ -98,6 +102,8 @@ const processLogs = (logs) => {
   }
 }
 
+let myIndex
+
 const updatePlayers = (playerProfiles) => {
   const elContainer = document.getElementById('players')
   elContainer.innerHTML = ''
@@ -105,7 +111,7 @@ const updatePlayers = (playerProfiles) => {
     const node = document.createElement('p')
     node.id = `player-id-${i}`
     node.innerText =
-      (pf.id === null ? '[not seated]' : `[${i + 1}]`) +
+      (pf.id === null ? '[not seated]' : `[${+i + 1}]`) +
       ` ${pf.creator.nickname}` +
       (pf.id === null ? '' : ` (${pf.details.race}; ${pf.stats.join(',')})`)
     elContainer.appendChild(node)
@@ -116,6 +122,8 @@ const updatePlayers = (playerProfiles) => {
     marker.classList.add('player-marker')
     marker.classList.add('invisible')
     node.prepend(marker)
+
+    if (pf.creator.id === uid) myIndex = +i
   }
 }
 
@@ -224,7 +232,18 @@ const showAppointmentPanel = () => {
 const updateAppointmentPanel = (status) => {
   showAppointmentPanel()
   markPlayer(status.holder)
+  if (status.holder === myIndex)
+    document.getElementById('appointment-ask').classList.remove('hidden')
+  else
+    document.getElementById('appointment-ask').classList.add('hidden')
 }
+
+document.getElementById('btn-appointment-accept').addEventListener('click', (e) => {
+  send({ type: 'appointment_accept' })
+})
+document.getElementById('btn-appointment-pass').addEventListener('click', (e) => {
+  send({ type: 'appointment_pass' })
+})
 
 ////// Gameplay panel //////
 
@@ -232,6 +251,9 @@ const showGameplayPanel = () => {
   document.getElementById('assembly-panel').classList.add('hidden')
   document.getElementById('appointment-panel').classList.add('hidden')
   document.getElementById('gameplay-panel').classList.remove('hidden')
+}
+const updateGameplayPanel = (gameplay_status) => {
+  showGameplayPanel()
 }
 
 // Connect after everything has been initialized;
