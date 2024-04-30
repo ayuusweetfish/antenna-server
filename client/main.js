@@ -48,7 +48,7 @@ const reconnect = () => {
     info('Connected')
   }
   ws.onclose = () => {
-    error('Connection dropped')
+    error('Connection lost')
   }
   ws.onmessage = (evt) => {
     const o = JSON.parse(evt.data)
@@ -65,15 +65,17 @@ const reconnect = () => {
       if (o.phase === 'assembly') {
         updateAssemblyPanel(o.players)
       } else if (o.phase === 'appointment') {
+        updateAppointmentPanel(o.appointment_status)
       } else if (o.phase === 'gameplay') {
       }
     } else if (o.type === 'assembly_update') {
       updatePlayers(o.players)
       updateAssemblyPanel(o.players)
+    } else if (o.type === 'start') {
+      updateAppointmentPanel({ holder: o.holder, timer: 60 })
     }
   }
 }
-reconnect()
 
 const send = (o) => ws.send(JSON.stringify(o))
 
@@ -101,19 +103,39 @@ const updatePlayers = (playerProfiles) => {
   elContainer.innerHTML = ''
   for (const [i, pf] of Object.entries(playerProfiles)) {
     const node = document.createElement('p')
-    node.id = `player-id-${pf.creator.id}`
+    node.id = `player-id-${i}`
     node.innerText =
       (pf.id === null ? '[not seated]' : `[${i + 1}]`) +
       ` ${pf.creator.nickname}` +
       (pf.id === null ? '' : ` (${pf.details.race}; ${pf.stats.join(',')})`)
     elContainer.appendChild(node)
+
+    const marker = document.createElement('span')
+    marker.id = `player-marker-${i}`
+    marker.innerText = '⬤'
+    marker.classList.add('player-marker')
+    marker.classList.add('invisible')
+    node.prepend(marker)
   }
 }
+
+const markPlayer = (index) => {
+  const elContainer = document.getElementById('players')
+  for (const node of elContainer.children) {
+    const i = +node.id.substring('player-id-'.length)
+    const marker = document.getElementById(`player-marker-${i}`)
+    if (i === index) marker.classList.remove('invisible')
+    else marker.classList.add('invisible')
+  }
+}
+
+////// Assembly panel //////
 
 const profileRepr = (pf) => `[${pf.id}]: race ${pf.details.race}, desc ${pf.details.description}, stats ${pf.stats.join(', ')}`
 
 const showAssemblyPanel = () => {
   document.getElementById('assembly-panel').classList.remove('hidden')
+  document.getElementById('appointment-panel').classList.add('hidden')
   document.getElementById('gameplay-panel').classList.add('hidden')
 }
 const showSeatAndProfiles = () => {
@@ -132,6 +154,17 @@ const updateAssemblyPanel = (players) => {
     showSeatWithdraw(p)
   else
     showSeatAndProfiles()
+
+  if (room.creator.id === uid) {
+    document.getElementById('btn-start').disabled =
+      players.length <= 1 || players.some((p) => p.id === null);
+  }
+}
+if (room.creator.id === uid) {
+  document.getElementById('seat-start').classList.remove('hidden')
+  document.getElementById('btn-start').addEventListener('click', (e) => {
+    send({ type: 'start' })
+  })
 }
 
 const addProfileButton = (pf) => {
@@ -180,5 +213,29 @@ document.getElementById('btn-seat-withdraw').addEventListener('click', (e) => {
     type: 'withdraw',
   })
 })
+
+////// Appointment panel //////
+
+const showAppointmentPanel = () => {
+  document.getElementById('assembly-panel').classList.add('hidden')
+  document.getElementById('appointment-panel').classList.remove('hidden')
+  document.getElementById('gameplay-panel').classList.add('hidden')
+}
+const updateAppointmentPanel = (status) => {
+  showAppointmentPanel()
+  markPlayer(status.holder)
+}
+
+////// Gameplay panel //////
+
+const showGameplayPanel = () => {
+  document.getElementById('assembly-panel').classList.add('hidden')
+  document.getElementById('appointment-panel').classList.add('hidden')
+  document.getElementById('gameplay-panel').classList.remove('hidden')
+}
+
+// Connect after everything has been initialized;
+// otherwise might receive `ReferenceError: can't access lexical declaration before initialization`
+reconnect()
 
 })()

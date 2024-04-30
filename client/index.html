@@ -40,6 +40,12 @@
 #players p {
   margin: 0 0;
 }
+#players .player-marker {
+  color: #272;
+}
+#players .player-marker.invisible {
+  visibility: hidden;
+}
 </style>
 <h3>Players</h3>
 <div id='players'>
@@ -84,7 +90,13 @@
   <button id='btn-new-profile'>Create</button>
 </details>
 </div>
+<div id='seat-start' class='hidden'>
+  <button id='btn-start'>Start!</button>
 </div>
+</div>
+
+<div id='appointment-panel' class='hidden'>
+<h3>Appointment phase</h3>
 </div>
 
 <div id='gameplay-panel' class='hidden'>

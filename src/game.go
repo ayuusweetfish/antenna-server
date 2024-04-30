@@ -1251,7 +1251,9 @@ loop:
 				conn := r.Conns[sigNewConn.UserId]
 				stateMessage := r.StateMessage(sigNewConn.UserId)
 				logMessage := r.LogMessage(0)
-				r.BroadcastAssemblyUpdate(sigNewConn.UserId)
+				if _, ok := r.Gameplay.PhaseStatus.(GameplayPhaseStatusAssembly); ok {
+					r.BroadcastAssemblyUpdate(sigNewConn.UserId)
+				}
 				r.Mutex.RUnlock()
 				conn.OutChannel <- stateMessage
 				conn.OutChannel <- logMessage
@@ -1265,7 +1267,9 @@ loop:
 						timeoutTimer.Reset(timeoutDur)
 					}
 				}
-				r.BroadcastAssemblyUpdate(sigLostConn.UserId)
+				if _, ok := r.Gameplay.PhaseStatus.(GameplayPhaseStatusAssembly); ok {
+					r.BroadcastAssemblyUpdate(sigLostConn.UserId)
+				}
 				r.Mutex.Unlock()
 			}
 			if sigTimer, ok := sig.(GameRoomSignalTimer); ok {
