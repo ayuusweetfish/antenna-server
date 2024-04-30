@@ -14,7 +14,8 @@ const form = (dict) => {
 const search = new URL(document.location).searchParams
 const uid = +(search.get('uid') || prompt('User ID'))
 const rid = +(search.get('room') || prompt('Room ID'))
-document.cookie = `auth=!${uid}; SameSite=Lax; Path=/; Max-Age=604800`
+const setCookie = () => document.cookie = `auth=!${uid}; SameSite=Lax; Path=/; Max-Age=604800`
+setCookie()
 window.history.replaceState(null, null, `?room=${rid}&uid=${uid}`)
 
 const user = await (await fetch(`${api}/me`, { credentials: 'include' })).json()
@@ -47,6 +48,8 @@ const tryParse = (text) => {
 
 let ws
 const reconnect = () => {
+  if (ws !== undefined) return
+  setCookie()
   ws = new WebSocket(
     (apiUrl.protocol === 'https:' ? 'wss:' : 'ws:') +
     `//${apiUrl.host}/room/${rid}/channel`
@@ -56,6 +59,8 @@ const reconnect = () => {
   }
   ws.onclose = () => {
     error('Connection lost')
+    ws = undefined
+    setTimeout(reconnect, 1000)
   }
   ws.onmessage = (evt) => {
     const o = JSON.parse(evt.data)
@@ -315,6 +320,7 @@ document.getElementById('btn-stats-random').addEventListener('click', (e) => {
 })
 
 document.getElementById('btn-new-profile').addEventListener('click', async (e) => {
+  setCookie()
   const resp = await (await fetch(`${api}/profile/create`, {
     credentials: 'include',
     method: 'POST',
