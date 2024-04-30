@@ -12,7 +12,8 @@ const form = (dict) => {
 const search = new URL(document.location).searchParams
 const uid = +(search.get('uid') || prompt('User ID'))
 const rid = +(search.get('room') || prompt('Room ID'))
-document.cookie = `auth=!${uid}; SameSite=Lax; Path=/; Secure; Max-Age=604800`
+document.cookie = `auth=!${uid}; SameSite=Lax; Path=/; Max-Age=604800`
+window.history.replaceState(null, null, `?uid=${uid}&room=${rid}`)
 
 const user = await (await fetch(`${api}/me`, { credentials: 'include' })).json()
 const room = await (await fetch(`${api}/room/${rid}`, { credentials: 'include' })).json()
