@@ -400,23 +400,37 @@ func (ps GameplayPhaseStatusGameplay) ReprWithEvent(playerIndex int, event strin
 	}
 }
 
-func (s GameplayState) PlayerReprs() []OrderedKeysMarshal {
+// The `GameRoom` reference is for additionally adding unseated players in assembly phase
+func (s GameplayState) PlayerReprs(r *GameRoom) []OrderedKeysMarshal {
 	playerReprs := []OrderedKeysMarshal{}
 	for _, p := range s.Players {
-		if p.Profile.Id > 0 {
-			playerReprs = append(playerReprs, p.Profile.Repr())
-		} else {
-			playerReprs = append(playerReprs, OrderedKeysMarshal{
-				{"id", nil},
-				{"creator", p.User.Repr()},
-			})
+		playerReprs = append(playerReprs, p.Profile.Repr())
+	}
+
+	// Unseated players in assembly phase
+	if _, ok := s.PhaseStatus.(GameplayPhaseStatusAssembly); ok {
+		for userId, conn := range r.Conns {
+			seated := false
+			for _, p := range s.Players {
+				if p.User.Id == userId {
+					seated = true
+					break
+				}
+			}
+			if !seated {
+				playerReprs = append(playerReprs, OrderedKeysMarshal{
+					{"id", nil},
+					{"creator", conn.User.Repr()},
+				})
+			}
 		}
 	}
+
 	return playerReprs
 }
-func (s GameplayState) Repr(userId int) OrderedKeysMarshal {
+func (s GameplayState) Repr(r *GameRoom, userId int) OrderedKeysMarshal {
 	// Players
-	playerReprs := s.PlayerReprs()
+	playerReprs := s.PlayerReprs(r)
 	playerIndex := s.PlayerIndex(userId)
 
 	// Phase
@@ -916,7 +930,7 @@ func (r *GameRoom) StateMessage(userId int) OrderedKeysMarshal {
 		{"room", r.Room.Repr()},
 		{"my_index", r.Gameplay.PlayerIndexNullable(userId)},
 	}
-	entries = append(entries, r.Gameplay.Repr(userId)...)
+	entries = append(entries, r.Gameplay.Repr(r, userId)...)
 	return entries
 }
 
@@ -960,7 +974,7 @@ func (r *GameRoom) BroadcastRoomState() {
 func (r *GameRoom) BroadcastAssemblyUpdate() {
 	message := OrderedKeysMarshal{
 		{"type", "assembly_update"},
-		{"players", r.Gameplay.PlayerReprs()},
+		{"players", r.Gameplay.PlayerReprs(r)},
 	}
 	for _, conn := range r.Conns {
 		conn.OutChannel <- message
@@ -994,6 +1008,7 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 	}
 }
 
+// Assumes a write lock
 func (r *GameRoom) BroadcastLog(text string) {
 	lines := strings.Split(text, "\n")
 
