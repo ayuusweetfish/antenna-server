@@ -21,6 +21,7 @@ const room = await (await fetch(`${api}/room/${rid}`, { credentials: 'include' }
 const cardSet = await (await fetch(`cards.json`)).json()
 const cogFn = ['Se', 'Si', 'Ne', 'Ni', 'Te', 'Ti', 'Fe', 'Fi']
 const relAspect = ['💥激情', '💚亲密', '⛰️责任']
+const resultText = {2: '大成功', 1: '成功', '-1': '失败', '-2': '大失败', null: '无'}
 
 document.getElementById('uid').innerText = uid
 document.getElementById('nickname').innerText = user.nickname
@@ -492,6 +493,19 @@ const updateGameplayPanel = (gameplay_status) => {
     document.getElementById('storytelling-end').classList.remove('hidden')
     document.getElementById('storytelling-action').innerText = gameplay_status.action
     document.getElementById('storytelling-keyword').innerText = gameplay_status.arena[gameplay_status.keyword]
+    document.getElementById('storytelling-holder-name').innerText =
+      (gameplay_status.holder === myIndex ? '自己' :
+       `[${gameplay_status.holder + 1}] ${lastSavedPlayers[gameplay_status.holder].creator.nickname}`)
+    document.getElementById('storytelling-holder-result').innerText = resultText[gameplay_status.holder_result]
+    if (gameplay_status.target !== null) {
+      document.getElementById('storytelling-target-clause').classList.remove('hidden')
+      document.getElementById('storytelling-target-name').innerText =
+        (gameplay_status.target === myIndex ? '自己' :
+         `[${gameplay_status.target + 1}] ${lastSavedPlayers[gameplay_status.target].creator.nickname}`)
+      document.getElementById('storytelling-target-result').innerText = resultText[gameplay_status.target_result]
+    } else {
+      document.getElementById('storytelling-target-clause').classList.add('hidden')
+    }
   } else {
     document.getElementById('storytelling-end').classList.add('hidden')
   }
@@ -545,9 +559,11 @@ const updateGameEndPanel = (o) => {
   document.getElementById('game-end-growth').innerText = o.growth_points
 }
 
+/*
 document.getElementById('btn-game-end-return').addEventListener('click', (e) => {
-  showAssemblyPanel()
+  updateAssemblyPanel(lastSavedPlayers.map((pf) => ({ id: null, creator: pf.creator })))
 })
+*/
 
 // Connect after everything has been initialized;
 // otherwise might receive `ReferenceError: can't access lexical declaration before initialization`
