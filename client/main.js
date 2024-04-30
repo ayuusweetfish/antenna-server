@@ -80,6 +80,8 @@ const reconnect = () => {
       updateGameplayPanel(o.gameplay_status)
     } else if (o.type === 'gameplay_progress') {
       updateGameplayPanel(o.gameplay_status)
+    } else if (o.type === 'game_end') {
+      showGameEndPanel()
     }
   }
 }
@@ -102,12 +104,16 @@ const processLogs = (logs) => {
     node.id = id
     node.innerHTML = `<span class='timestamp'>${(new Date(l.timestamp * 1000)).toISOString().substring(11, 19)}</span> ${htmlEscape(l.content)}`
     elContainer.appendChild(node)
+    node.scrollIntoView()
   }
 }
 
+let lastSavedPlayers
 let myIndex
 
 const updatePlayers = (playerProfiles) => {
+  lastSavedPlayers= playerProfiles
+
   const elContainer = document.getElementById('players')
   elContainer.innerHTML = ''
   for (const [i, pf] of Object.entries(playerProfiles)) {
@@ -238,10 +244,13 @@ const showAppointmentPanel = () => {
 const updateAppointmentPanel = (status) => {
   showAppointmentPanel()
   markPlayer(status.holder)
-  if (status.holder === myIndex)
+  if (status.holder === myIndex) {
+    document.getElementById('appointment-wait').classList.add('hidden')
     document.getElementById('appointment-ask').classList.remove('hidden')
-  else
+  } else {
+    document.getElementById('appointment-wait').classList.remove('hidden')
     document.getElementById('appointment-ask').classList.add('hidden')
+  }
 }
 
 document.getElementById('btn-appointment-accept').addEventListener('click', (e) => {
@@ -258,6 +267,38 @@ const showGameplayPanel = () => {
   document.getElementById('appointment-panel').classList.add('hidden')
   document.getElementById('gameplay-panel').classList.remove('hidden')
 }
+
+let arenaBtns, handBtns, targetBtns
+let selArena, selHand, selTarget
+
+const updateGameplayIxnBtnsAndCheckAct = () => {
+  // Send action message on match
+  if (selArena !== undefined && selHand !== undefined && selTarget !== undefined) {
+    send({
+      type: 'action',
+      hand_index: selHand,
+      arena_index: selArena,
+      target: selTarget,
+    })
+    selArena = undefined
+    selHand = undefined
+    selTarget = undefined
+  }
+
+  for (const [i, b] of Object.entries(arenaBtns)) {
+    if (+i === selArena) b.classList.add('selected')
+    else b.classList.remove('selected')
+  }
+  for (const [i, b] of Object.entries(handBtns)) {
+    if (+i === selHand) b.classList.add('selected')
+    else b.classList.remove('selected')
+  }
+  for (const [i, b] of Object.entries(targetBtns)) {
+    if (+i === selTarget) b.classList.add('selected')
+    else b.classList.remove('selected')
+  }
+}
+
 const updateGameplayPanel = (gameplay_status) => {
   showGameplayPanel()
   let storyteller = undefined
@@ -268,24 +309,79 @@ const updateGameplayPanel = (gameplay_status) => {
   markPlayer(gameplay_status.holder, storyteller)
 
   const elIxnContainer = document.getElementById('gameplay-interactions')
-  if (gameplay_status.holder === myIndex)
+  if (gameplay_status.holder === myIndex && gameplay_status.step === 'selection')
     elIxnContainer.classList.add('active')
   else elIxnContainer.classList.remove('active')
 
   const elArena = document.getElementById('gameplay-arena-list')
   elArena.innerText = ''
-  for (const kw of gameplay_status.arena) {
+  arenaBtns = []
+  for (const [i, kw] of Object.entries(gameplay_status.arena)) {
     const node = document.createElement('button')
     node.innerText = kw
     elArena.appendChild(node)
+    node.addEventListener('click', (e) => {
+      selArena = +i
+      updateGameplayIxnBtnsAndCheckAct()
+    })
+    arenaBtns.push(node)
   }
 
   const elHand = document.getElementById('gameplay-hand-list')
-  for (const card of gameplay_status.hand) {
+  elHand.innerText = ''
+  handBtns = []
+  for (const [i, card] of Object.entries(gameplay_status.hand)) {
     const node = document.createElement('button')
     node.innerText = card
     elHand.appendChild(node)
+    node.addEventListener('click', (e) => {
+      selHand = +i
+      updateGameplayIxnBtnsAndCheckAct()
+    })
+    handBtns.push(node)
   }
+
+  const elTarget = document.getElementById('gameplay-target-list')
+  elTarget.innerText = ''
+  targetBtns = []
+  for (const [i, pf] of Object.entries(lastSavedPlayers)) {
+    if (+i === myIndex) continue
+    const node = document.createElement('button')
+    node.innerText = `[${+i + 1}] ${pf.creator.nickname}`
+    elTarget.appendChild(node)
+    node.addEventListener('click', (e) => {
+      selTarget = +i
+      updateGameplayIxnBtnsAndCheckAct()
+    })
+    targetBtns[i] = node
+
+    elTarget.append(` — relationship with me: ${gameplay_status.relationship[+i].join(', ')}`)
+
+    elTarget.appendChild(document.createElement('br'))
+  }
+  const node = document.createElement('button')
+  node.innerText = 'No target'
+  elTarget.appendChild(node)
+  node.addEventListener('click', (e) => {
+    selTarget = -1
+    updateGameplayIxnBtnsAndCheckAct()
+  })
+  targetBtns[-1] = node
+
+  if (storyteller === myIndex)
+    document.getElementById('storytelling-end').classList.remove('hidden')
+  else document.getElementById('storytelling-end').classList.add('hidden')
+}
+
+document.getElementById('btn-storytelling-end').addEventListener('click', (e) => {
+  send({ type: 'storytelling_end' })
+})
+
+////// Gameplay panel //////
+
+const showGameEndPanel = () => {
+  markPlayer(-1)
+  document.getElementById('storytelling-end').classList.add('hidden')
 }
 
 // Connect after everything has been initialized;
