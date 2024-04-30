@@ -166,20 +166,23 @@ const markPlayer = (index, storytellerIndex) => {
 const elTimerContainer = document.getElementById('timer')
 const elTimerDisplay = document.getElementById('timer-display')
 let timerExpiresAt
-let intervalId
+let timeoutId
 
 const updateTimerDisplay = () => {
   if (timerExpiresAt === undefined) return
   const remaining = timerExpiresAt - Date.now()
-  elTimerDisplay.innerText = Math.round(remaining / 1000)
-  if (remaining < 0) {
-    clearInterval(intervalId)
-    intervalId = undefined
+  const remainingSeconds = Math.ceil(remaining / 1000 - 0.1)
+  elTimerDisplay.innerText = remainingSeconds
+  if (remainingSeconds <= 0) {
+    timeoutId = undefined
+  } else {
+    setTimeout(updateTimerDisplay,
+      (timerExpiresAt - (remainingSeconds - 1) * 1000) - Date.now())
   }
 }
 const timerSet = (seconds) => {
-  if (intervalId !== undefined) clearInterval(intervalId)
-  intervalId = undefined
+  if (timeoutId !== undefined) clearTimeout(timeoutId)
+  timeoutId = undefined
   if (seconds === null) {
     elTimerContainer.classList.add('invisible')
     timerExpiresAt = undefined
@@ -187,10 +190,6 @@ const timerSet = (seconds) => {
     elTimerContainer.classList.remove('invisible')
     timerExpiresAt = Date.now() + seconds * 1000
     updateTimerDisplay()
-    setTimeout(() => {
-      updateTimerDisplay()
-      intervalId = setInterval(updateTimerDisplay, 1000)
-    }, (seconds % 1) * 1000)
   }
 }
 
