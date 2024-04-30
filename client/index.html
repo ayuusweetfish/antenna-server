@@ -12,11 +12,11 @@
   User ID: <span id='uid'></span> — Nickname: <strong><span id='nickname'></span></strong> 　 · 　
   Room ID: <span id='rid'></span> — Title: <strong><span id='room-title'></span></strong> — [<strong><span id='room-tags'></span></strong>] — by <strong><span id='room-creator'></span></strong>
   <span id='progress-indicator' class='hidden'>　 · 　 Act <strong><span id='act-num'></span></strong>, Round <strong><span id='round-num'></span></strong></span>
-</div>
-<div>
+
   <style>
     #state-msg.error { color: #a43; }
     #state-msg.info { color: #394; }
+    #state-msg { float: right; margin-left: 1em; }
   </style>
   <strong><span id='state-msg'></span></strong>
 </div>
@@ -41,11 +41,16 @@
   <h3>Logs</h3>
   <div id='log'>
   </div>
+  <br>
+  <div id='comment'>
+    <input type='text' placeholder='Comment' id='txt-comment'>
+    <button id='btn-comment'>Send</button>
+  </div>
 </div>
 
 <style>
 #players.assembly {
-  height: 20ex;
+  height: 15ex;
   overflow-y: scroll;
 }
 #players p {
@@ -124,9 +129,14 @@
 </div>
 
 <style>
+.rel-aspect-0, .rel-aspect-1, .rel-aspect-2 {
+  display: inline-block;
+  margin: 0 0.2em;
+}
 .rel-aspect-0 { color: #ff0c6d; }
 .rel-aspect-1 { color: #53ad5b; }
 .rel-aspect-2 { color: #3196fb; }
+
 .cog-fn-Se, .cog-fn-Si, .cog-fn-Ne, .cog-fn-Ni,
 .cog-fn-Te, .cog-fn-Ti, .cog-fn-Fe, .cog-fn-Fi {
   display: inline-block;
@@ -168,26 +178,38 @@
     background: #afa;
     font-weight: bold;
   }
+  #gameplay-interactions h4 {
+    margin: 1ex 0;
+  }
+  #gameplay-interactions table td:nth-child(2) {
+    padding-left: 0.6em;
+    border-left: 1px solid #aaa;
+  }
 </style>
 <div id='gameplay-interactions'>
   <div id='gameplay-arena'>
     <h4>Arena keywords</h4>
     <div id='gameplay-arena-list'></div>
   </div>
-  <div id='gameplay-hand'>
-    <h4>Hand</h4>
-    <div id='gameplay-hand-list'></div>
-  </div>
-  <div id='gameplay-target'>
-    <h4>Target</h4>
-    <div id='gameplay-target-list'></div>
-  </div>
+  <table><tr><td>
+    <div id='gameplay-hand'>
+      <h4>Hand</h4>
+      <div id='gameplay-hand-list'></div>
+    </div>
+  </td><td>
+    <div id='gameplay-target'>
+      <h4>Target</h4>
+      <div id='gameplay-target-list'></div>
+    </div>
+  </td></tr></table>
 </div>
 
 <br>
 <div id='storytelling-end'>
-  <h4>Please narrate your story now</h4>
-  <button id='btn-storytelling-end'>End storytelling</button>
+  <strong>🗣️🎙️ Narrating!</strong>
+  <button id='btn-storytelling-end'>End</button>
+  <br>
+  Action: <strong><span id='storytelling-action'></span></strong>, keyword: <strong><span id='storytelling-keyword'></span></strong>
 </div>
 
 <br>
@@ -196,10 +218,6 @@
   <button id='btn-queue-join'>+ join</button>
 </div>
 <br>
-<div id='comment'>
-  <input type='text' placeholder='Comment' id='txt-comment'>
-  <button id='btn-comment'>Send</button>
-</div>
 
 </div>
 

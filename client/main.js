@@ -20,7 +20,7 @@ const room = await (await fetch(`${api}/room/${rid}`, { credentials: 'include' }
 
 const cardSet = await (await fetch(`cards.json`)).json()
 const cogFn = ['Se', 'Si', 'Ne', 'Ni', 'Te', 'Ti', 'Fe', 'Fi']
-const relAspect = ['△激情', '○亲密', '□责任']
+const relAspect = ['💥激情', '💚亲密', '⛰️责任']
 
 document.getElementById('uid').innerText = uid
 document.getElementById('nickname').innerText = user.nickname
@@ -113,6 +113,17 @@ const processLogs = (logs) => {
   elContainer.scrollTo(0, elContainer.scrollHeight)
 }
 
+const sendComment = () => {
+  if (document.getElementById('txt-comment').value !== '') {
+    send({ type: 'comment', text: document.getElementById('txt-comment').value })
+    document.getElementById('txt-comment').value = ''
+  }
+}
+document.getElementById('txt-comment').addEventListener('keypress', (e) => {
+  if (e.keyCode === 13) sendComment()
+})
+document.getElementById('btn-comment').addEventListener('click', (e) => sendComment())
+
 let lastSavedPlayers
 let myIndex
 
@@ -125,9 +136,11 @@ const updatePlayers = (playerProfiles) => {
     const node = document.createElement('p')
     node.id = `player-id-${i}`
     node.innerHTML =
+      (pf.creator.id === uid ? '<strong>' : '') +
       (pf.id === null ? '[not seated]' : `[${+i + 1}]`) +
       ` ${htmlEscape(pf.creator.nickname)}` +
-      (pf.id === null ? '' : ` (${htmlEscape(pf.details.race)}; ${formatStats(pf.stats)})`)
+      (pf.creator.id === uid ? ' 👋</strong>' : '') +
+      (pf.id === null ? '' : ` — ${htmlEscape(pf.details.race)}; ${formatStats(pf.stats)}`)
     elContainer.appendChild(node)
 
     const marker = document.createElement('span')
@@ -142,11 +155,11 @@ const updatePlayers = (playerProfiles) => {
 
 // const formatStats = (stats) => stats.map((n, i) => `${cogFn[i]}=${n}`).join(', ')
 const formatStats = (stats) =>
-  stats.map((n, i) => `<span class='cog-fn-${cogFn[i]}'>${cogFn[i]} <strong>${n}</strong></span>`).join(', ')
+  stats.map((n, i) => `<span class='cog-fn-${cogFn[i]}'>${cogFn[i]} <strong>${n}</strong></span>`).join(' ')
 const formatCogFns = (fns) =>
   fns.map((i) => `<span class='cog-fn-${cogFn[i]}'>${cogFn[i]}</span>`).join(' ')
 const formatRelationship = (rel, plus) =>
-  rel.map((n, i) => `<span class='rel-aspect-${i}'>${relAspect[i]} <strong>${plus && n > 0 ? '+' : ''}${n}</strong></span>`).join(', ')
+  rel.map((n, i) => `<span class='rel-aspect-${i}'>${relAspect[i]} <strong>${plus && n > 0 ? '+' : ''}${n}</strong></span>`).join(' ')
 
 const markPlayer = (index, storytellerIndex) => {
   const elContainer = document.getElementById('players')
@@ -404,7 +417,7 @@ const updateGameplayPanel = (gameplay_status) => {
 
     const [requirements, _, relationshipChanges] = cardSet[card]
     const nodeDesc = document.createElement('span')
-    nodeDesc.innerHTML = ` — ${formatCogFns(requirements)} — ${formatRelationship(relationshipChanges, true)}`
+    nodeDesc.innerHTML = ` ${formatCogFns(requirements)} ${formatRelationship(relationshipChanges, true)}`
     elHand.appendChild(nodeDesc)
 
     elHand.appendChild(document.createElement('br'))
@@ -439,9 +452,13 @@ const updateGameplayPanel = (gameplay_status) => {
   })
   targetBtns[-1] = node
 
-  if (storyteller === myIndex)
+  if (storyteller === myIndex) {
     document.getElementById('storytelling-end').classList.remove('hidden')
-  else document.getElementById('storytelling-end').classList.add('hidden')
+    document.getElementById('storytelling-action').innerText = gameplay_status.action
+    document.getElementById('storytelling-keyword').innerText = gameplay_status.arena[gameplay_status.keyword]
+  } else {
+    document.getElementById('storytelling-end').classList.add('hidden')
+  }
 
   document.getElementById('queue-list').innerText =
     gameplay_status.queue.map((i) => `[${i + 1}] ${lastSavedPlayers[i].creator.nickname}`).join(', ')
@@ -458,11 +475,6 @@ document.getElementById('btn-storytelling-end').addEventListener('click', (e) =>
 
 document.getElementById('btn-queue-join').addEventListener('click', (e) => {
   send({ type: 'queue' })
-})
-
-document.getElementById('btn-comment').addEventListener('click', (e) => {
-  send({ type: 'comment', text: document.getElementById('txt-comment').value })
-  document.getElementById('txt-comment').value = ''
 })
 
 ////// Game end panel //////
