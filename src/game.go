@@ -506,8 +506,8 @@ func (s *GameplayState) Start(roomSignalChannel chan interface{}) (string, strin
 	s.PhaseStatus = st
 
 	logContent := fmt.Sprintf(
-		"座位 %d 玩家【%s】收到起始玩家指派，等待选择",
-		st.Holder+1, s.Players[st.Holder].User.Nickname,
+		"玩家【%s】收到起始玩家指派，等待选择",
+		s.Players[st.Holder].User.Nickname,
 	)
 	return "", logContent
 }
@@ -563,9 +563,9 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 			st.Timer.Reset(TimeLimitAppointment)
 			s.PhaseStatus = st
 			logContent := fmt.Sprintf(
-				"座位 %d 玩家【%s】跳过指派，轮到座位 %d 玩家【%s】",
-				prev+1, s.Players[prev].User.Nickname,
-				st.Holder+1, s.Players[st.Holder].User.Nickname,
+				"玩家【%s】跳过指派，轮到玩家【%s】",
+				s.Players[prev].User.Nickname,
+				s.Players[st.Holder].User.Nickname,
 			)
 			return prev, st.Holder, false, "", logContent
 		} else {
@@ -574,9 +574,9 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 			luckyDog := CloudRandom(len(s.Players))
 			s.PhaseStatus = GameplayPhaseStatusGameplayNew(len(s.Players), luckyDog, f)
 			logContent := fmt.Sprintf(
-				"座位 %d 玩家【%s】跳过指派。随机抽取座位 %d 玩家【%s】开始游戏",
-				st.Holder+1, s.Players[st.Holder].User.Nickname,
-				luckyDog+1, s.Players[luckyDog].User.Nickname,
+				"玩家【%s】跳过指派。随机抽取玩家【%s】开始游戏",
+				s.Players[st.Holder].User.Nickname,
+				s.Players[luckyDog].User.Nickname,
 			)
 			return st.Holder, luckyDog, true, "", logContent
 		}
@@ -584,8 +584,8 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 		st.Timer.Stop()
 		s.PhaseStatus = GameplayPhaseStatusGameplayNew(len(s.Players), st.Holder, f)
 		logContent := fmt.Sprintf(
-			"座位 %d 玩家【%s】接受指派，作为起始玩家开始游戏",
-			st.Holder+1, s.Players[st.Holder].User.Nickname,
+			"玩家【%s】接受指派，作为起始玩家开始游戏",
+			s.Players[st.Holder].User.Nickname,
 		)
 		return -1, st.Holder, true, "", logContent
 	}
@@ -734,17 +734,17 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	logContent := ""
 	if target == -1 {
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
-			playerIndex+1, s.Players[playerIndex].User.Nickname,
+			"玩家【%s】使用手牌【%s】与关键词【%s】\n抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
+			s.Players[playerIndex].User.Nickname,
 			st.Action, keyword,
 			st.HolderDifficulty, resultString(st.HolderResult),
 			s.Players[playerIndex].User.Nickname,
 		)
 	} else {
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】对座位 %d 玩家【%s】使用手牌【%s】与关键词【%s】\n主动方抽取难度为 %d，事件判定结果为【%s】\n被动方抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
-			playerIndex+1, s.Players[playerIndex].User.Nickname,
-			target+1, s.Players[target].User.Nickname,
+			"玩家【%s】对玩家【%s】使用手牌【%s】与关键词【%s】\n主动方抽取难度为 %d，事件判定结果为【%s】\n被动方抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
+			s.Players[playerIndex].User.Nickname,
+			s.Players[target].User.Nickname,
 			st.Action, keyword,
 			st.HolderDifficulty, resultString(st.HolderResult),
 			st.TargetDifficulty, resultString(st.TargetResult),
@@ -845,16 +845,16 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, bool, string, string)
 			newProgressStr = fmt.Sprintf("【第 %d 幕，第 %d 轮】\n", st.ActCount, st.RoundCount)
 		}
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】完成讲述\n%s由座位 %d 玩家【%s】选择手牌",
-			storyteller+1, s.Players[storyteller].User.Nickname,
+			"主动方【%s】完成讲述\n%s由下一位玩家【%s】选择手牌",
+			s.Players[storyteller].User.Nickname,
 			newProgressStr,
-			st.Holder+1, s.Players[st.Holder].User.Nickname,
+			s.Players[st.Holder].User.Nickname,
 		)
 	} else {
 		logContent = fmt.Sprintf(
-			"座位 %d 玩家【%s】完成讲述\n轮到座位 %d 玩家【%s】继续讲述",
-			storyteller+1, s.Players[storyteller].User.Nickname,
-			nextStoryteller+1, s.Players[nextStoryteller].User.Nickname,
+			"主动方【%s】完成讲述\n轮到被动方【%s】继续讲述",
+			s.Players[storyteller].User.Nickname,
+			s.Players[nextStoryteller].User.Nickname,
 		)
 	}
 	return isNewMove, isGameEnd, "", logContent
@@ -1208,7 +1208,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		// If past assembly phase, display player index
 		_, isAssembly := r.Gameplay.PhaseStatus.(GameplayPhaseStatusAssembly)
 		if !isAssembly {
-			playerIndexStr = fmt.Sprintf("座位 %d ", playerIndex+1)
+			// playerIndexStr = fmt.Sprintf("座位 %d ", playerIndex+1)
 		}
 		logContent := fmt.Sprintf("%s玩家【%s】说：%s",
 			playerIndexStr, r.Gameplay.Players[playerIndex].User.Nickname, text)
