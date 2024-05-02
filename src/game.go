@@ -520,6 +520,14 @@ func (s GameplayState) PlayerIndexNullable(userId int) interface{} {
 	}
 }
 
+func ifTimeout(isTimeout bool) string {
+	if isTimeout {
+		return "（超时自动托管）"
+	} else {
+		return ""
+	}
+}
+
 // A `userId` of -1 means on behealf of the current holder (i.e., skip the holder check)
 // Returns:
 // - the holder who has selected to skip (-1 denotes null)
@@ -549,7 +557,8 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 			st.Timer.Reset(TimeLimitAppointment)
 			s.PhaseStatus = st
 			logContent := fmt.Sprintf(
-				"玩家【%s】跳过指派，轮到玩家【%s】",
+				"%s玩家【%s】跳过指派，轮到玩家【%s】",
+				ifTimeout(userId == -1),
 				s.Players[prev].User.Nickname,
 				s.Players[st.Holder].User.Nickname,
 			)
@@ -560,7 +569,8 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 			luckyDog := CloudRandom(len(s.Players))
 			s.PhaseStatus = GameplayPhaseStatusGameplayNew(len(s.Players), luckyDog, f)
 			logContent := fmt.Sprintf(
-				"玩家【%s】跳过指派。随机抽取玩家【%s】开始游戏",
+				"%s玩家【%s】跳过指派。随机抽取玩家【%s】开始游戏",
+				ifTimeout(userId == -1),
 				s.Players[st.Holder].User.Nickname,
 				s.Players[luckyDog].User.Nickname,
 			)
@@ -593,7 +603,6 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	playerIndex := st.Holder
 
 	if userId == -1 {
-		userId = s.Players[st.Holder].User.Id
 		handIndex = CloudRandom(len(st.Player[playerIndex].Hand))
 		arenaIndex = CloudRandom(len(st.Arena))
 	}
@@ -658,7 +667,7 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	}
 
 	st.HolderResult = checkResult(st.HolderDifficulty, s.Players[playerIndex].Profile.Stats)
-	// XXX: Do relationship values change when acting without a target?
+	// Relationship values do not change when acting without a target
 	if target != -1 {
 		applyRelationshipChanges(st.HolderResult, &st.Player[playerIndex].Relationship[target])
 	}
@@ -720,7 +729,8 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	logContent := ""
 	if target == -1 {
 		logContent = fmt.Sprintf(
-			"玩家【%s】使用手牌【%s】与关键词【%s】\n抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
+			"%s玩家【%s】使用手牌【%s】与关键词【%s】\n抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
+			ifTimeout(userId == -1),
 			s.Players[playerIndex].User.Nickname,
 			st.Action, keyword,
 			st.HolderDifficulty, resultString(st.HolderResult),
@@ -831,14 +841,17 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, bool, string, string)
 			newProgressStr = fmt.Sprintf("【第 %d 幕，第 %d 轮】\n", st.ActCount, st.RoundCount)
 		}
 		logContent = fmt.Sprintf(
-			"主动方【%s】完成讲述\n%s由下一位玩家【%s】选择手牌",
+			"%s主动方【%s】完成讲述\n%s由下一位玩家【%s】选择手牌",
+			ifTimeout(userId == -1),
 			s.Players[storyteller].User.Nickname,
 			newProgressStr,
 			s.Players[st.Holder].User.Nickname,
 		)
 	} else {
 		logContent = fmt.Sprintf(
-			"主动方【%s】完成讲述\n轮到被动方【%s】继续讲述",
+			"%s主动方【%s】完成讲述\n轮到被动方【%s】继续讲述",
+			ifTimeout(userId == -1),
+			s.Players[storyteller].User.Nickname,
 			s.Players[storyteller].User.Nickname,
 			s.Players[nextStoryteller].User.Nickname,
 		)
