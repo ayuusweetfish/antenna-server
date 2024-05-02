@@ -524,6 +524,10 @@ func (h *corsAllowAllHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if r.Method == "OPTIONS" {
 		// Intercept OPTIONS requests
 		w.Write([]byte{})
+	} else if r.URL.Path == "/play" {
+		w.Header().Set("Location", "/play/")
+		w.WriteHeader(302)
+		w.Write([]byte("Redirecting to /play/"))
 	} else if strings.HasPrefix(r.URL.Path, "/play/") {
 		h.StaticServer.ServeHTTP(w, r)
 	} else {
