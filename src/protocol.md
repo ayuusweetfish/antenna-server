@@ -161,6 +161,7 @@
     - "storytelling_end_next_storyteller" —— 轮到的玩家结束讲述，轮到下一位（被动方）讲述
     - "storytelling_end_new_move" —— 轮到的玩家结束讲述，开始新的回合
     - "queue" —— 有玩家加入排队
+  - **is_timeout** (boolean) 事件是否是由于超时自动托管触发（可能出现于下列事件："appointment_accept"、"action_check"、"storytelling_end_next_storyteller"、"storytelling_end_new_move"）
   - **act_count** (number) 当前幕数（从 1 开始）
   - **round_count** (number) 当前轮数（从 1 开始）
   - **move_count** (number) 当前回合数（从 1 开始）
@@ -187,7 +188,7 @@
   - 🔸 **target_difficulty** (null | number) 被动方投掷出的行动难度。若无被动方，则为空。
     - 此为投掷出的原始难度。根据规则，实际进行判定时使用的数值在此基础上增加 **holder_result** × -10。
   - 🔸 **target_result** (null | number) 被动方判定结果。若无被动方，则为空。
-  - **timer** (number) 当前环节的剩余时间，以秒计，精确到小数点后一位
+  - **timer** (number) 当前环节的剩余时间，以秒计
   - **queue** (number[]) 当前举手排队的玩家列表，靠前的玩家最先轮到
 
 后续消息也是类似，游戏过程中指代玩家均采用座位编号，即 **players** 中的下标，从 0 开始。考虑到多语言、文本编码等因素，卡牌与关键词均使用缩略名称，名称列表 🚧。
@@ -223,6 +224,7 @@
 - **holder** (number) 轮到选择的首位玩家座位号
 - **my_index** (number) 自己在本场游戏中的玩家座位号
   - 此值实为冗余信息，供参考。在最末一条 **组建期间房间状态变更 "assembly_update"** 消息的 **players** 中找到玩家自身，其下标即为 **my_index**。
+- **timer** (number) 首位轮到玩家的时间限制，以秒计
 
 #### 🔺 起始玩家指派：接受 "appointment_accept"
 - 无额外参数
@@ -240,17 +242,20 @@
 - **prev_holder** (null | number) 若为玩家自行接受，则为 null；若为两轮后随机指派，则表示最后一位跳过的玩家座位号。
 - **gameplay_status** (object) 同 **房间状态 "room_state"**。其中重要的信息在此复述供参考。
   - **event** (string) 等于 "appointment_accept"
+  - **is_timeout** (boolean) 事件是否是由于超时自动托管触发
   - **hand** (string[]) 自己所持有的手牌
   - **arena** (strings[]) 场上的关键词列表
   - **holder** (number) 当前轮到的座位号
     - 注：此即为接受指派/被随机指派起始的玩家座位号
-  - **timer** (number) 当前环节的剩余时间，以秒计，精确到小数点后一位
+  - **timer** (number) 当前环节的剩余时间，以秒计
 
 #### 🔻 起始玩家指派：跳过 "appointment_pass"
 表示一位玩家（也可能是自己）跳过自己作为起始玩家的指派。（如果玩家跳过后已轮转满两轮，则不发送此消息，而视为是随机玩家“接受”了指派，见上。）
 
 - **prev_holder** (number) 选择跳过的玩家
 - **next_holder** (number) 接下来轮到选择的玩家。等于 (**prev_holder** + 1) % N，其中 N 为玩家总数
+- **is_timeout** (boolean) 事件是否是由于超时自动托管触发
+- **timer** (number) 下一位轮到玩家的时间限制，以秒计
 
 #### 🔺 打出手牌 "action"
 - **hand_index** (number) 手牌的编号（**hand** 中的下标，从 0 开始）
