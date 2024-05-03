@@ -570,9 +570,10 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 			luckyDog := CloudRandom(len(s.Players))
 			s.PhaseStatus = GameplayPhaseStatusGameplayNew(len(s.Players), luckyDog, f)
 			logContent := fmt.Sprintf(
-				"%s玩家【%s】跳过指派。随机抽取玩家【%s】开始游戏",
+				"%s玩家【%s】跳过指派。随机抽取玩家【%s】开始游戏\n+请玩家【%s】选择关键词与手牌",
 				ifTimeout(userId == -1),
 				s.Players[st.Holder].User.Nickname,
+				s.Players[luckyDog].User.Nickname,
 				s.Players[luckyDog].User.Nickname,
 			)
 			return st.Holder, luckyDog, true, "", logContent
@@ -581,7 +582,8 @@ func (s *GameplayState) AppointmentAcceptOrPass(userId int, accept bool, roomSig
 		st.Timer.Stop()
 		s.PhaseStatus = GameplayPhaseStatusGameplayNew(len(s.Players), st.Holder, f)
 		logContent := fmt.Sprintf(
-			"玩家【%s】接受指派，作为起始玩家开始游戏",
+			"玩家【%s】接受指派，作为起始玩家开始游戏\n+请玩家【%s】选择关键词与手牌",
+			s.Players[st.Holder].User.Nickname,
 			s.Players[st.Holder].User.Nickname,
 		)
 		return -1, st.Holder, true, "", logContent
@@ -730,7 +732,7 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 	logContent := ""
 	if target == -1 {
 		logContent = fmt.Sprintf(
-			"%s玩家【%s】使用手牌【%s】与关键词【%s】\n抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
+			"+%s玩家【%s】使用手牌【%s】与关键词【%s】\n+抽取难度为 %d，事件判定结果为【%s】\n+请主动方玩家【%s】讲述",
 			ifTimeout(userId == -1),
 			s.Players[playerIndex].User.Nickname,
 			st.Action, keyword,
@@ -739,7 +741,7 @@ func (s *GameplayState) ActionCheck(userId int, handIndex int, arenaIndex int, t
 		)
 	} else {
 		logContent = fmt.Sprintf(
-			"玩家【%s】对玩家【%s】使用手牌【%s】与关键词【%s】\n主动方抽取难度为 %d，事件判定结果为【%s】\n被动方抽取难度为 %d，事件判定结果为【%s】\n轮到玩家【%s】讲述",
+			"+玩家【%s】对玩家【%s】使用手牌【%s】与关键词【%s】\n+主动方抽取难度为 %d，事件判定结果为【%s】\n+被动方抽取难度为 %d，事件判定结果为【%s】\n+请主动方玩家【%s】讲述",
 			s.Players[playerIndex].User.Nickname,
 			s.Players[target].User.Nickname,
 			st.Action, keyword,
@@ -837,12 +839,12 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, bool, string, string)
 	if isGameEnd {
 		logContent = "游戏结束！"
 	} else if nextStoryteller == -1 { // isNewMove == true
-		newProgressStr := "进入下一回合，"
+		newProgressStr := "+进入下一回合，"
 		if st.MoveCount == 1 {
-			newProgressStr = fmt.Sprintf("【第 %d 幕，第 %d 轮】\n", st.ActCount, st.RoundCount)
+			newProgressStr = fmt.Sprintf("【第 %d 幕，第 %d 轮】\n+", st.ActCount, st.RoundCount)
 		}
 		logContent = fmt.Sprintf(
-			"%s主动方【%s】完成讲述\n%s由下一位玩家【%s】选择手牌",
+			"%s主动方【%s】完成讲述\n%s请玩家【%s】选择关键词与手牌",
 			ifTimeout(userId == -1),
 			s.Players[storyteller].User.Nickname,
 			newProgressStr,
@@ -850,7 +852,7 @@ func (s *GameplayState) StorytellingEnd(userId int) (bool, bool, string, string)
 		)
 	} else {
 		logContent = fmt.Sprintf(
-			"%s主动方【%s】完成讲述\n轮到被动方【%s】继续讲述",
+			"%s主动方【%s】完成讲述\n+请被动方玩家【%s】讲述",
 			ifTimeout(userId == -1),
 			s.Players[storyteller].User.Nickname,
 			s.Players[storyteller].User.Nickname,
@@ -891,6 +893,7 @@ type GameRoomLog struct {
 	Id        int
 	Timestamp int64
 	Content   string
+	Highlight bool
 }
 
 type GameRoom struct {
@@ -956,6 +959,7 @@ func (r *GameRoom) LogMessage(history int) OrderedKeysMarshal {
 			{"id", entry.Id},
 			{"timestamp", entry.Timestamp},
 			{"content", entry.Content},
+			{"isHighlight", entry.Highlight},
 		})
 	}
 	return OrderedKeysMarshal{
@@ -1028,7 +1032,17 @@ func (r *GameRoom) BroadcastLog(text string) {
 	// Append to log
 	// Keep only 5 latest
 	for _, line := range lines {
-		entry := GameRoomLog{Id: 0, Timestamp: time.Now().Unix(), Content: line}
+		isHighlight := false
+		if line[0] == '+' {
+			isHighlight = true
+			line = line[1:]
+		}
+		entry := GameRoomLog{
+			Id:        0,
+			Timestamp: time.Now().Unix(),
+			Content:   line,
+			Highlight: isHighlight,
+		}
 		if len(r.Log) >= 1 {
 			entry.Id = r.Log[len(r.Log)-1].Id + 1
 		}

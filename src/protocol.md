@@ -285,12 +285,13 @@
 - **gameplay_status** (object) 同 **房间状态 "room_state"**。
 
 #### 🔻 游戏日志 "log"
-游戏中各类事件均会产生日志。（当前均为纯文本，富文本功能 🚧）
+游戏中各类事件均会产生日志。
 
 - **log** (object[]) 多条日志
   - **id** (number) 顺序编号，可用于断线等情况下去重
   - **timestamp** (number) Unix 时间戳，以秒计
   - **content** (string) 日志文本
+  - **isHighlight** (boolean) 是否高亮（📃 临时功能，未来会改动）
 
 #### 🔻 游戏结束 "game_end"
 游戏结束（最后一位玩家结束讲述）时广播此消息。
