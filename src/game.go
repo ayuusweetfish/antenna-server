@@ -375,12 +375,13 @@ func (ps GameplayPhaseStatusAppointment) Repr(playerIndex int) OrderedKeysMarsha
 	}
 }
 func (ps GameplayPhaseStatusGameplay) Repr(playerIndex int) OrderedKeysMarshal {
-	return ps.ReprWithEvent(playerIndex, "none")
+	return ps.ReprWithEvent(playerIndex, "none", false)
 }
-func (ps GameplayPhaseStatusGameplay) ReprWithEvent(playerIndex int, event string) OrderedKeysMarshal {
+func (ps GameplayPhaseStatusGameplay) ReprWithEvent(playerIndex int, event string, isTimeout bool) OrderedKeysMarshal {
 	actionTaken := (ps.Step == "storytelling_holder" || ps.Step == "storytelling_target")
 	return OrderedKeysMarshal{
 		{"event", event},
+		{"is_timeout", isTimeout},
 		{"act_count", ps.ActCount},
 		{"round_count", ps.RoundCount},
 		{"move_count", ps.MoveCount},
@@ -971,6 +972,7 @@ func (r *GameRoom) BroadcastStart() {
 			{"type", "start"},
 			{"holder", r.Gameplay.PhaseStatus.(GameplayPhaseStatusAppointment).Holder},
 			{"my_index", r.Gameplay.PlayerIndexNullable(userId)},
+			{"timer", json.Number(fmt.Sprintf("%.1f", TimeLimitAppointment.Seconds()))},
 		}
 	}
 }
@@ -991,7 +993,7 @@ func (r *GameRoom) BroadcastAssemblyUpdate() {
 	}
 }
 
-func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, isStarting bool) {
+func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, isStarting bool, isTimeout bool) {
 	for userId, conn := range r.Conns {
 		var message OrderedKeysMarshal
 		if isStarting {
@@ -1005,13 +1007,15 @@ func (r *GameRoom) BroadcastAppointmentUpdate(prevHolder int, nextHolder int, is
 			message = OrderedKeysMarshal{
 				{"type", "appointment_accept"},
 				{"prev_holder", prevVal},
-				{"gameplay_status", st.Repr(r.Gameplay.PlayerIndex(userId))},
+				{"gameplay_status", st.ReprWithEvent(r.Gameplay.PlayerIndex(userId), "appointment_accept", isTimeout)},
 			}
 		} else {
 			message = OrderedKeysMarshal{
 				{"type", "appointment_pass"},
 				{"prev_holder", prevHolder},
 				{"next_holder", nextHolder},
+				{"is_timeout", isTimeout},
+				{"timer", json.Number(fmt.Sprintf("%.1f", TimeLimitAppointment.Seconds()))},
 			}
 		}
 		conn.OutChannel <- message
@@ -1044,12 +1048,12 @@ func (r *GameRoom) BroadcastLog(text string) {
 	}
 }
 
-func (r *GameRoom) BroadcastGameProgress(event string) {
+func (r *GameRoom) BroadcastGameProgress(event string, isTimeout bool) {
 	st := r.Gameplay.PhaseStatus.(GameplayPhaseStatusGameplay)
 	for userId, conn := range r.Conns {
 		conn.OutChannel <- OrderedKeysMarshal{
 			{"type", "gameplay_progress"},
-			{"gameplay_status", st.ReprWithEvent(r.Gameplay.PlayerIndex(userId), event)},
+			{"gameplay_status", st.ReprWithEvent(r.Gameplay.PlayerIndex(userId), event, isTimeout)},
 		}
 	}
 }
@@ -1148,7 +1152,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if err != "" {
 			panic(err)
 		}
-		r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
+		r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting, false)
 		r.BroadcastLog(logContent)
 	} else if message["type"] == "action" {
 		handIndex, ok := message["hand_index"].(float64)
@@ -1167,7 +1171,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if err != "" {
 			panic(err)
 		}
-		r.BroadcastGameProgress("action_check")
+		r.BroadcastGameProgress("action_check", false)
 		r.BroadcastLog(logContent)
 	} else if message["type"] == "storytelling_end" {
 		isNewMove, isGameEnd, err, logContent := r.Gameplay.StorytellingEnd(msg.UserId)
@@ -1185,7 +1189,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 			} else {
 				event = "storytelling_end_next_storyteller"
 			}
-			r.BroadcastGameProgress(event)
+			r.BroadcastGameProgress(event, false)
 			r.BroadcastLog(logContent)
 		}
 	} else if message["type"] == "queue" {
@@ -1193,7 +1197,7 @@ func (r *GameRoom) ProcessMessage(msg GameRoomInMessage) {
 		if err != "" {
 			panic(err)
 		}
-		r.BroadcastGameProgress("queue")
+		r.BroadcastGameProgress("queue", false)
 	} else if message["type"] == "comment" {
 		text := fmt.Sprintf("%v", message["text"])
 		playerIndexStr := ""
@@ -1282,7 +1286,7 @@ loop:
 					prevHolder, nextHolder, isStarting, err, logContent :=
 						r.Gameplay.AppointmentAcceptOrPass(-1, false, r.Signal)
 					if err == "" {
-						r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting)
+						r.BroadcastAppointmentUpdate(prevHolder, nextHolder, isStarting, true)
 					}
 					r.BroadcastLog(logContent)
 					r.Mutex.Unlock()
@@ -1293,7 +1297,7 @@ loop:
 						if st.Step == "selection" {
 							// Select random card
 							_, logContent := r.Gameplay.ActionCheck(-1, -1, -1, -1)
-							r.BroadcastGameProgress("action_check")
+							r.BroadcastGameProgress("action_check", true)
 							r.BroadcastLog(logContent)
 						} else if st.Step == "storytelling_holder" || st.Step == "storytelling_target" {
 							// Stop storytelling
@@ -1310,7 +1314,7 @@ loop:
 								} else {
 									event = "storytelling_end_next_storyteller"
 								}
-								r.BroadcastGameProgress(event)
+								r.BroadcastGameProgress(event, true)
 								r.BroadcastLog(logContent)
 							}
 						}
