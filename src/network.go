@@ -456,7 +456,31 @@ func versionInfoHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	fmt.Fprintf(w, "Time %s\nHash %s\n", vcsTime, vcsRev)
+	GameRoomMapMutex.Lock()
+	roomsCount := len(GameRoomMap)
+	var roomsStr strings.Builder
+	if roomsCount > 0 {
+		roomsStr.WriteString(" (")
+		i := 0
+		for roomId, _ := range GameRoomMap {
+			if i > 0 {
+				roomsStr.WriteString(", ")
+			}
+			roomsStr.WriteString(strconv.Itoa(roomId))
+			i += 1
+			if i >= 5 {
+				break
+			}
+		}
+		if roomsCount > i {
+			roomsStr.WriteString(", etc.")
+		}
+		roomsStr.WriteString(")")
+	}
+	GameRoomMapMutex.Unlock()
+	fmt.Fprintf(w, "#Rooms %d%s\nPID    %d\n\nTime %s\nHash %s\n",
+		roomsCount, roomsStr.String(), os.Getpid(),
+		vcsTime, vcsRev)
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
